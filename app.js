@@ -18,11 +18,25 @@ const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 // than in the repo so the page works with whichever Google project you use.
 const SETTINGS_KEY = DEMO ? "calendar.demo" : "calendar.settings";
 function loadSettings() {
-  const base = { hidden: [], hiddenSpaces: [], view: "agenda", clientId: "", defaultCal: "", trayOpen: true, showTasks: true };
+  const base = { hidden: [], hiddenSpaces: [], view: "agenda", clientId: "", defaultCal: "", trayOpen: true, showTasks: true, theme: "auto" };
   try { return { ...base, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") }; } catch { return base; }
 }
 let settings = loadSettings();
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch { /* private mode */ } };
+
+// "auto" follows the system; light or dark is set on <html> (index.html also
+// does this before the first paint) and the browser bar colour follows it.
+const THEME_BAR = { light: "#f4f1ea", dark: "#1a1e1a" };
+function applyTheme() {
+  const forced = settings.theme === "light" || settings.theme === "dark";
+  if (forced) document.documentElement.dataset.theme = settings.theme;
+  else delete document.documentElement.dataset.theme;
+  for (const meta of document.querySelectorAll("meta[name=theme-color]")) {
+    const own = meta.media.includes("dark") ? "dark" : "light";
+    meta.content = THEME_BAR[forced ? settings.theme : own];
+  }
+}
+applyTheme();
 
 // ─── State ───────────────────────────────────────────────────────────
 const $ = (id) => document.getElementById(id);
@@ -166,7 +180,8 @@ function renderTop() {
   const n = index.undated.length;
   $("inbox-badge").hidden = !n;
   $("inbox-badge").textContent = n;
-  $("inbox-btn").hidden = wide.matches || !settings.showTasks;
+  $("inbox-btn").hidden = wide.matches;
+  $("inbox-btn").disabled = !settings.showTasks;
   $("tasks-btn").setAttribute("aria-pressed", settings.showTasks);
 }
 
@@ -805,6 +820,11 @@ function openSettings() {
     <section class="set-sec"><h3>Task lists</h3><div class="f-group" id="space-list"></div>
       <p class="f-note" style="margin:6px 2px 0">These use the connections saved in <a href="${T.TASKS_APP}">tasks.</a>, so set them up or change them there.</p>
     </section>
+    <section class="set-sec"><h3>Appearance</h3>
+      <div class="f-group"><div class="f-line"><label>Theme</label><select name="theme">
+        <option value="auto">Match system</option><option value="light">Light</option><option value="dark">Dark</option>
+      </select></div></div>
+    </section>
     <div class="sh-foot"><button class="btn" data-act="refresh">Refresh</button><span class="spacer"></span><button class="btn primary" data-close>Done</button></div>
   </div>`);
 
@@ -849,6 +869,10 @@ function openSettings() {
     };
     list.append(line);
   }
+  const theme = node.querySelector("[name=theme]");
+  theme.value = settings.theme;
+  theme.onchange = () => { settings.theme = theme.value; saveSettings(); applyTheme(); };
+
   const def = node.querySelector("[name=defaultCal]");
   for (const c of writableCalendars()) def.append(new Option(c.name, c.id, false, c.id === defaultCalendar()?.id));
   def.onchange = () => { settings.defaultCal = def.value; saveSettings(); };

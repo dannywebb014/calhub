@@ -11,6 +11,14 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="calendar.">
+  <script>
+    // Apply a theme picked in Settings before the page paints, so it doesn't flash.
+    try {
+      const key = new URLSearchParams(location.search).has("demo") ? "calendar.demo" : "calendar.settings";
+      const theme = JSON.parse(localStorage.getItem(key) || "{}").theme;
+      if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
+    } catch { /* private mode: follow the system */ }
+  </script>
   <link rel="apple-touch-icon" href="icon-180.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
@@ -31,8 +39,9 @@
       --body:'Source Sans 3', system-ui, -apple-system, Helvetica, Arial, sans-serif;
       color-scheme:light;
     }
+    /* Dark follows the system unless Settings → Appearance picks one. */
     @media (prefers-color-scheme: dark) {
-      :root {
+      :root:not([data-theme="light"]) {
         --bg:#1a1e1a; --card:#232823; --hover:#2a302a; --input:#2e342e; --line:#3a423a; --line-strong:#465046;
         --text:#ebe8de; --muted:#a8a89c; --dim:#6f7468;
         --logo:#a9cdf2; --accent:#6fa8e0; --accent-text:#a9cdf2; --accent-soft:#6fa8e022;
@@ -41,6 +50,15 @@
         --shadow:0 1px 4px rgba(0,0,0,.35); --shadow-lg:0 18px 50px rgba(0,0,0,.5);
         color-scheme:dark;
       }
+    }
+    :root[data-theme="dark"] {
+      --bg:#1a1e1a; --card:#232823; --hover:#2a302a; --input:#2e342e; --line:#3a423a; --line-strong:#465046;
+      --text:#ebe8de; --muted:#a8a89c; --dim:#6f7468;
+      --logo:#a9cdf2; --accent:#6fa8e0; --accent-text:#a9cdf2; --accent-soft:#6fa8e022;
+      --danger:#d27a7a; --danger-soft:#d27a7a1f; --success:#6bba6b;
+      --sp-my:#4fa8a0; --sp-work:#d99a5b; --sp-todoist:#7cc48a;
+      --shadow:0 1px 4px rgba(0,0,0,.35); --shadow-lg:0 18px 50px rgba(0,0,0,.5);
+      color-scheme:dark;
     }
 
     * { box-sizing:border-box; }
@@ -107,6 +125,7 @@
       display:flex; align-items:center; justify-content:center; color:var(--muted); box-shadow:var(--shadow); flex-shrink:0;
     }
     .icon-btn:active { transform:scale(.95); }
+    .icon-btn:disabled { opacity:.4; box-shadow:none; cursor:default; }
     .icon-btn[aria-pressed=true] { color:var(--accent-text); background:var(--accent-soft); border-color:transparent; }
     #tray-inline[hidden] { display:none; }
     .icon-btn .badge {
@@ -530,6 +549,6 @@
 
   <!-- The version is bumped on each release so a phone holding the page in
        its cache still fetches the new code. -->
-  <script type="module" src="app.js?v=3"></script>
+  <script type="module" src="app.js?v=4"></script>
 </body>
 </html>
