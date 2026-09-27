@@ -1273,7 +1273,6 @@ $("tasks-btn").addEventListener("click", () => {
   settings.showTasks = !settings.showTasks;
   saveSettings();
   render();
-  toast(settings.showTasks ? "Showing tasks" : "Tasks hidden");
 });
 $("inbox-btn").addEventListener("click", () => { openSheet("tray"); fillTraySheet(); });
 $("sheet-back").addEventListener("click", closeSheet);
