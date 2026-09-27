@@ -18,7 +18,7 @@ const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 // than in the repo so the page works with whichever Google project you use.
 const SETTINGS_KEY = DEMO ? "calendar.demo" : "calendar.settings";
 function loadSettings() {
-  const base = { hidden: [], hiddenSpaces: [], view: "agenda", clientId: "", defaultCal: "", trayOpen: true };
+  const base = { hidden: [], hiddenSpaces: [], view: "agenda", clientId: "", defaultCal: "", trayOpen: true, showTasks: true };
   try { return { ...base, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") }; } catch { return base; }
 }
 let settings = loadSettings();
@@ -119,7 +119,7 @@ function reindex() {
   const today = D.today();
   const tasks = new Map();
   const undated = [];
-  for (const t of S.tasks) {
+  for (const t of settings.showTasks ? S.tasks : []) {
     if (hiddenSpaces.has(t.spaceId)) continue;
     if (!t.date) { undated.push(t); continue; }
     const d = t.date < today ? today : t.date;
@@ -160,13 +160,14 @@ function renderTop() {
   const title = $("title-text");
   title.innerHTML = v === "day" && wide.matches
     ? `${esc(D.weekday(d))} <span class="yr">${esc(D.dayMonth(d))}</span>`
-    : `${esc(D.monthName(d))} <span class="yr">${d.slice(0, 4)}</span>`;
+    : `${esc(D.monthName(d))}${!wide.matches && d.slice(0, 4) === D.today().slice(0, 4) ? "" : ` <span class="yr">${d.slice(0, 4)}</span>`}`;
   $("title").classList.toggle("open", S.stripMonth);
   document.querySelectorAll("#views button").forEach(b => b.classList.toggle("on", b.dataset.view === v || (!wide.matches && b.dataset.view === S.view)));
   const n = index.undated.length;
   $("inbox-badge").hidden = !n;
   $("inbox-badge").textContent = n;
-  $("inbox-btn").hidden = wide.matches;
+  $("inbox-btn").hidden = wide.matches || !settings.showTasks;
+  $("tasks-btn").setAttribute("aria-pressed", settings.showTasks);
 }
 
 function renderBanner() {
@@ -537,6 +538,7 @@ function trayItems() {
 function renderTray() {
   if (!wide.matches) return;
   const box = $("tray-inline");
+  box.hidden = !settings.showTasks;
   box.className = settings.trayOpen ? "" : "tray-closed";
   box.innerHTML = `<button class="tray-head" id="tray-toggle"><b>unscheduled<span class="dot-accent">.</span></b><span class="n">${index.undated.length || ""}</span>${I.chev}</button>`;
   box.append(trayItems());
@@ -1267,6 +1269,12 @@ $("prev").addEventListener("click", () => step(-1));
 $("next").addEventListener("click", () => step(1));
 $("title").addEventListener("click", () => { if (wide.matches) return; S.stripMonth = !S.stripMonth; renderTop(); renderStrip(); });
 $("settings-btn").addEventListener("click", openSettings);
+$("tasks-btn").addEventListener("click", () => {
+  settings.showTasks = !settings.showTasks;
+  saveSettings();
+  render();
+  toast(settings.showTasks ? "Showing tasks" : "Tasks hidden");
+});
 $("inbox-btn").addEventListener("click", () => { openSheet("tray"); fillTraySheet(); });
 $("sheet-back").addEventListener("click", closeSheet);
 
