@@ -82,6 +82,7 @@ const I = {
   repeat: svg(`<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>`, 12),
   x: svg(`<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`, 16, 2.4),
   grip: svg(`<circle cx="9" cy="6" r="1.2"/><circle cx="15" cy="6" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="18" r="1.2"/><circle cx="15" cy="18" r="1.2"/>`, 16, 2),
+  clock: svg(`<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>`),
   cal: svg(`<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`),
   chev: svg(`<polyline points="6 9 12 15 18 9"/>`, 16, 2.4),
   left: svg(`<polyline points="15 18 9 12 15 6"/>`, 16, 2.4),
@@ -180,6 +181,7 @@ function renderTop() {
   const n = index.undated.length;
   $("inbox-badge").hidden = !n;
   $("inbox-badge").textContent = n;
+  $("today-num").textContent = Number(D.today().slice(8));
   $("inbox-btn").hidden = wide.matches;
   $("inbox-btn").disabled = !settings.showTasks;
   $("tasks-btn").setAttribute("aria-pressed", settings.showTasks);
@@ -570,12 +572,13 @@ function openSheet(kind, node) {
   S.sheet = kind;
   if (node) $("sheet").replaceChildren(node);
   $("sheet-layer").hidden = false;
+  $("sheet-layer").classList.remove("top");
   $("sheet").scrollTop = 0;
 }
 function closeSheet() {
   S.sheet = null;
   $("sheet-layer").hidden = true;
-  $("sheet-layer").classList.remove("away");
+  $("sheet-layer").classList.remove("away", "top");
   $("sheet").replaceChildren();
 }
 
@@ -981,31 +984,72 @@ async function moveEvent(e, target) {
 const qa = $("qa-input");
 let qaParsed = null;
 
-function reparseQuick() {
-  const text = qa.value;
-  if (!text.trim()) { S.qaKind = null; qaParsed = null; paintQuick(); return; }
-  const kind = S.qaKind || guessKind(text);
-  qaParsed = kind === "task"
+// Shared by the bar along the bottom and the add sheet from the header.
+function parseEntry(text, kind) {
+  if (!text.trim()) return null;
+  kind = kind || guessKind(text);
+  return kind === "task"
     ? { kind, tasks: parseTask(text, chrono, { defaultSpace: T.defaultSpace() }) }
     : parseEvent(text, chrono, { day: S.day, calendars: writableCalendars() });
+}
+const entryReady = (p) => Boolean(p && (p.kind === "event" ? p.title : p.tasks.length));
+
+function draftWhen(p) {
+  const day = D.iso(p.start);
+  let when = D.relative(day);
+  if (p.allDay) {
+    const last = D.addDays(D.iso(p.end), -1);
+    when += last !== day ? ` – ${D.relative(last)}` : ", all-day";
+  } else when += `, ${D.time(p.start)}–${D.time(p.end)}`;
+  return when;
+}
+
+// Saves an event or tasks; true once it's done, else it has said why.
+async function addEntry(p) {
+  try {
+    if (p.kind === "event") {
+      if (!googleReady()) { toast("Connect Google Calendar first.", "err", { label: "Settings", run: openSettings }); return false; }
+      const c = p.calendar || defaultCalendar();
+      if (!c) { toast("None of your calendars can be added to.", "err"); return false; }
+      const saved = await cal.createEvent(c, { title: p.title, allDay: p.allDay, start: p.start, end: p.end, location: p.location });
+      S.events.set(saved.key, saved);
+      select(saved.startDay);
+      toast(`Added ${saved.title} · ${D.relative(saved.startDay)}`, "ok", { label: "Edit", run: () => openEditor(S.events.get(saved.key)) });
+      writeSnapshot();
+      return true;
+    }
+    const missing = [...new Set(p.tasks.map(t => t.space))].filter(s => !DEMO && !T.isConfigured(s));
+    if (missing.length) {
+      toast(`Set up ${missing.map(T.spaceLabel).join(" and ")} in tasks. first.`, "err", { label: "Open", run: () => { location.href = T.TASKS_APP; } });
+      return false;
+    }
+    for (const t of p.tasks) await tk.addTask({ text: t.text, space: t.space, date: t.date });
+    toast(`Added ${p.tasks.length === 1 ? p.tasks[0].text : `${p.tasks.length} tasks`}`);
+    await loadTasks();
+    return true;
+  } catch (err) {
+    console.error("Quick add failed:", err);
+    if (p.kind === "event") googleError(err, "Couldn’t add it");
+    else toast(err instanceof TypeError ? "Couldn’t reach Craft or Todoist." : `Couldn’t add it: ${err.message}`, "err");
+    return false;
+  }
+}
+
+function reparseQuick() {
+  if (!qa.value.trim()) S.qaKind = null;
+  qaParsed = parseEntry(qa.value, S.qaKind);
   paintQuick();
 }
 
 function paintQuick() {
   const p = qaParsed;
   $("qa-preview").hidden = !p;
-  $("qa-add").disabled = !p || (p.kind === "event" ? !p.title : !p.tasks.length);
+  $("qa-add").disabled = !entryReady(p);
   if (!p) return;
   $("qa-kind").innerHTML = `${p.kind === "event" ? "Event" : "Task"} ${I.swap}`;
   if (p.kind === "event") {
     const c = p.calendar || defaultCalendar();
-    const day = D.iso(p.start);
-    let when = D.relative(day);
-    if (p.allDay) {
-      const last = D.addDays(D.iso(p.end), -1);
-      when += last !== day ? ` – ${D.relative(last)}` : ", all-day";
-    } else when += `, ${D.time(p.start)}–${D.time(p.end)}`;
-    $("qa-desc").innerHTML = `<b>${esc(p.title || "…")}</b> · ${esc(when)}${p.location ? ` · ${esc(p.location)}` : ""}${c ? ` · ${esc(c.name)}` : ""}`;
+    $("qa-desc").innerHTML = `<b>${esc(p.title || "…")}</b> · ${esc(draftWhen(p))}${p.location ? ` · ${esc(p.location)}` : ""}${c ? ` · ${esc(c.name)}` : ""}`;
   } else {
     $("qa-desc").innerHTML = p.tasks.map(t => `<b>${esc(t.text)}</b> · ${esc(T.spaceLabel(t.space))} · ${esc(t.date ? D.relative(t.date) : "no date")}`).join(" &nbsp; ");
   }
@@ -1013,39 +1057,119 @@ function paintQuick() {
 
 async function submitQuick() {
   const p = qaParsed;
-  if (!p) return;
+  if (!entryReady(p)) return;
   $("qa-add").disabled = true;
-  try {
-    if (p.kind === "event") {
-      if (!googleReady()) { toast("Connect Google Calendar first.", "err", { label: "Settings", run: openSettings }); return; }
-      const c = p.calendar || defaultCalendar();
-      if (!c) { toast("None of your calendars can be added to.", "err"); return; }
-      const saved = await cal.createEvent(c, { title: p.title, allDay: p.allDay, start: p.start, end: p.end, location: p.location });
-      S.events.set(saved.key, saved);
-      qa.value = "";
-      reparseQuick();
-      select(saved.startDay);
-      toast(`Added ${saved.title} · ${D.relative(saved.startDay)}`, "ok", { label: "Edit", run: () => openEditor(S.events.get(saved.key)) });
-      writeSnapshot();
-    } else {
-      const missing = [...new Set(p.tasks.map(t => t.space))].filter(s => !DEMO && !T.isConfigured(s));
-      if (missing.length) {
-        toast(`Set up ${missing.map(T.spaceLabel).join(" and ")} in tasks. first.`, "err", { label: "Open", run: () => { location.href = T.TASKS_APP; } });
-        return;
-      }
-      for (const t of p.tasks) await tk.addTask({ text: t.text, space: t.space, date: t.date });
-      qa.value = "";
-      reparseQuick();
-      toast(`Added ${p.tasks.length === 1 ? p.tasks[0].text : `${p.tasks.length} tasks`}`);
-      await loadTasks();
+  if (await addEntry(p)) { qa.value = ""; reparseQuick(); }
+  else paintQuick();
+}
+
+// ─── Add sheet ───────────────────────────────────────────────────────
+// The + in the header, after Fantastical: type a sentence and the card
+// under it fills in as you go. Event or Task can be picked by hand, as can
+// the calendar, and "More" opens the full editor with what's there so far.
+const ADD_HINTS = ["Lunch with Sam Friday 1pm at Nando’s", "Gym tomorrow 7am for 45 mins", "Holiday 12–19 Oct", "Work send the invoice tomorrow"];
+
+function openAdd(text = "") {
+  let kind = null;          // chosen by hand, else guessed from the words
+  let calId = null;         // calendar picked in the card
+  let parsed = null;
+  const node = html(`<form class="add" novalidate autocomplete="off">
+    <div class="add-head">
+      <div class="add-kind" role="group" aria-label="Kind"><button type="button" data-kind="event">Event</button><button type="button" data-kind="task">Task</button></div>
+      <button type="button" class="x-btn" data-close aria-label="Close">${I.x}</button>
+    </div>
+    <textarea class="add-input" name="text" rows="1" enterkeyhint="done" autocapitalize="sentences" placeholder="Event or task" aria-label="What to add"></textarea>
+    <div class="add-card" aria-live="polite"></div>
+    <div class="sh-foot"><button type="button" class="btn" data-act="more">More…</button><span class="spacer"></span><button class="btn primary" data-act="add">Add</button></div>
+  </form>`);
+  const input = node.elements.text;
+  const card = node.querySelector(".add-card");
+  const addBtn = node.querySelector("[data-act=add]");
+  const more = node.querySelector("[data-act=more]");
+
+  const grow = () => { input.style.height = "auto"; input.style.height = `${input.scrollHeight}px`; };
+  const reparse = () => {
+    parsed = parseEntry(input.value, kind);
+    if (parsed?.kind === "event" && calId) parsed.calendar = calendarOf(calId) || parsed.calendar;
+    paint();
+  };
+
+  function paint() {
+    const shown = parsed?.kind || kind || "event";
+    node.querySelectorAll("[data-kind]").forEach(b => b.classList.toggle("on", b.dataset.kind === shown));
+    addBtn.disabled = !entryReady(parsed);
+    more.hidden = shown !== "event";
+    if (!parsed) {
+      card.className = "add-card hints";
+      card.innerHTML = `<p>Try</p>${ADD_HINTS.map(h => `<button type="button" data-hint="${esc(h)}">${esc(h)}</button>`).join("")}`;
+      return;
     }
-  } catch (err) {
-    console.error("Quick add failed:", err);
-    if (p.kind === "event") googleError(err, "Couldn’t add it");
-    else toast(err instanceof TypeError ? "Couldn’t reach Craft or Todoist." : `Couldn’t add it: ${err.message}`, "err");
-  } finally {
-    paintQuick();
+    if (parsed.kind === "task") {
+      card.className = "add-card";
+      card.innerHTML = parsed.tasks.map(t => `<div class="ac-task" style="--c:${spaceColour(t.space)}"><span class="ring"></span>
+        <div><div class="ac-title">${esc(t.text || "…")}</div><div class="ac-sub">${esc(T.spaceLabel(t.space))} · ${esc(t.date ? `${D.relative(t.date)}` : "No date")}</div></div></div>`).join("")
+        || `<div class="ac-sub">Nothing to add yet</div>`;
+      return;
+    }
+    const p = parsed;
+    const c = p.calendar || defaultCalendar();
+    const day = D.iso(p.start);
+    const last = p.allDay ? D.addDays(D.iso(p.end), -1) : D.iso(p.end);
+    const date = last !== day
+      ? `${D.weekday(day, "short")} ${D.dayMonth(day)} – ${D.weekday(last, "short")} ${D.dayMonth(last)}`
+      : `${D.weekday(day)} ${D.dayMonth(day)}${day.slice(0, 4) !== D.today().slice(0, 4) ? ` ${day.slice(0, 4)}` : ""}`;
+    const rel = D.relative(day);
+    const time = p.allDay ? "All-day" : `${D.time(p.start)} – ${D.time(p.end)} <span class="muted">· ${dur(p.end - p.start)}</span>`;
+    card.className = "add-card event";
+    card.style.setProperty("--c", c?.color || "var(--accent)");
+    card.innerHTML = `<div class="ac-title">${esc(p.title || "New event")}</div>
+      <div class="ac-row">${I.cal}<span>${esc(date)}${/^(?:Today|Tomorrow|Yesterday)$/.test(rel) && last === day ? ` <span class="muted">· ${esc(rel)}</span>` : ""}</span></div>
+      <div class="ac-row">${I.clock}<span>${time}</span></div>
+      ${p.location ? `<div class="ac-row">${I.pin}<span>${esc(p.location)}</span></div>` : ""}
+      ${c ? `<label class="ac-row ac-cal"><i></i><select aria-label="Calendar"></select>${I.chev}</label>` : `<div class="ac-row muted">Connect Google Calendar in settings to add events.</div>`}`;
+    const sel = card.querySelector("select");
+    if (sel) {
+      for (const x of writableCalendars()) sel.append(new Option(x.name, x.id, false, x.id === c.id));
+      sel.onchange = () => { calId = sel.value; reparse(); };
+    }
   }
+
+  input.addEventListener("input", () => { if (!input.value.trim()) kind = null; grow(); reparse(); });
+  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); node.requestSubmit(); } });
+  node.querySelector(".add-kind").onclick = (e) => {
+    const b = e.target.closest("[data-kind]");
+    if (!b) return;
+    kind = b.dataset.kind;
+    reparse();
+    input.focus();
+  };
+  card.addEventListener("click", (e) => {
+    const h = e.target.closest("[data-hint]");
+    if (!h) return;
+    input.value = h.dataset.hint;
+    grow();
+    reparse();
+    input.focus();
+  });
+  more.onclick = () => {
+    const p = parsed?.kind === "event" ? parsed : null;
+    if (!p) { newEventAt(S.day); return; }
+    openEditor(null, { title: p.title, allDay: p.allDay, start: p.start, end: p.end, location: p.location, description: "", calendar: p.calendar });
+  };
+  node.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!entryReady(parsed)) return;
+    addBtn.disabled = true;
+    if (await addEntry(parsed)) closeSheet();
+    else paint();
+  });
+
+  openSheet("add", node);
+  $("sheet-layer").classList.add("top");
+  input.value = text;
+  grow();
+  reparse();
+  input.focus();
 }
 
 qa.addEventListener("input", reparseQuick);
@@ -1293,6 +1417,7 @@ $("prev").addEventListener("click", () => step(-1));
 $("next").addEventListener("click", () => step(1));
 $("title").addEventListener("click", () => { if (wide.matches) return; S.stripMonth = !S.stripMonth; renderTop(); renderStrip(); });
 $("settings-btn").addEventListener("click", openSettings);
+$("add-btn").addEventListener("click", () => openAdd());
 $("tasks-btn").addEventListener("click", () => {
   settings.showTasks = !settings.showTasks;
   saveSettings();
@@ -1307,7 +1432,7 @@ document.addEventListener("keydown", (e) => {
   const keys = {
     t: () => select(D.today()), d: () => setView("day"), w: () => setView("week"), m: () => setView("month"),
     l: () => setView("agenda"), ArrowLeft: () => step(-1), ArrowRight: () => step(1),
-    n: () => qa.focus(), "/": () => qa.focus(),
+    n: () => openAdd(), "/": () => qa.focus(),
   };
   if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
 });
