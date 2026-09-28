@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.CalWidget" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:navigationBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">@color/accent</item>
+    </style>
+    <color name="bg">#1A1E1A</color>
+    <color name="card">#232823</color>
+    <color name="text">#EBE8DE</color>
+    <color name="muted">#A8A89C</color>
+    <color name="accent">#6FA8E0</color>
+    <color name="logo">#A9CDF2</color>
+</resources>

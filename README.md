@@ -24,6 +24,14 @@ Sign-in is a redirect to Google rather than a popup, since popups are unreliable
 
 Nothing secret is in this repo. The client ID, the Google token and the task connections live in the browser only.
 
+## Android widget
+
+`android/` is a small app with a home-screen widget: today and the next six days, in these colours, with a + that opens the add sheet. It reads the calendar on the phone, which the Google Calendar app keeps in sync, so it needs no sign-in and works offline. Tapping opens this page on that day (`?day=2026-09-30`) or with the add sheet open (`?add`).
+
+GitHub Actions builds it on every push that touches `android/`. On `main` the APK goes to the [widget release](https://github.com/dannywebb014/calhub/releases/tag/widget). To install: open [calhub-widget.apk](https://github.com/dannywebb014/calhub/releases/download/widget/calhub-widget.apk) on the phone, allow installs from the browser when asked, open **calendar. widget**, allow calendar access, then add the widget. Updates install the same way, over the top.
+
+The signing key is in the repo (`android/app/sideload.keystore`) so every build can update the last one. It's for sideloading only.
+
 ## lifeOS.
 
 After each load, the app writes `calendar.snapshot` to local storage: the next events, the visible calendars, and today's task count. The lifeOS. card uses it to show the next event and the number of tasks today. While the Google token is still valid, lifeOS. fetches the next event fresh.
@@ -38,6 +46,7 @@ After each load, the app writes `calendar.snapshot` to local storage: the next e
 - `drag.js`: drag and drop that also works with touch
 - `dates.js`: date helpers (days are `YYYY-MM-DD`, weeks start on Monday)
 - `demo.js`: the made-up data for `?demo`
+- `android/`: the home-screen widget app
 - `parse.js`, `todoist.js`: copied from tasks. Keep them in step with it.
 
 A static site with no build step, hosted on GitHub Pages.

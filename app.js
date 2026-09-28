@@ -1491,7 +1491,29 @@ document.addEventListener("visibilitychange", () => {
   if (Date.now() - lastRefresh > 5 * 60 * 1000) refreshAll();
 });
 
+// Links from the Android widget: ?day=2026-09-30 opens that day and ?add
+// opens the add sheet. They're kept in this tab while the page goes to
+// Google and back for a new sign-in, then used once.
+const INTENT_KEY = "calendar.intent";
+function stashIntent() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has("day") && !q.has("add")) return;
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(q.get("day") || "") ? q.get("day") : null;
+  try { sessionStorage.setItem(INTENT_KEY, JSON.stringify({ day, add: q.has("add") })); } catch { /* private mode */ }
+  q.delete("day");
+  q.delete("add");
+  history.replaceState(null, "", location.pathname + (q.size ? `?${q}` : "") + location.hash);
+}
+function takeIntent() {
+  try {
+    const intent = JSON.parse(sessionStorage.getItem(INTENT_KEY) || "null");
+    sessionStorage.removeItem(INTENT_KEY);
+    return intent || {};
+  } catch { return {}; }
+}
+
 async function start() {
+  stashIntent();
   const back = DEMO ? null : google.takeRedirect();
   if (back?.error) {
     const quiet = ["interaction_required", "login_required", "consent_required"].includes(back.error);
@@ -1501,8 +1523,10 @@ async function start() {
     google.connect(settings.clientId, { silent: true });
     return;
   }
-  render();
-  scrollAgendaTo(S.day);
+  const intent = takeIntent();
+  if (intent.day) select(intent.day);
+  else { render(); scrollAgendaTo(S.day); }
+  if (intent.add) openAdd();
   lastRefresh = Date.now();
   await Promise.all([
     loadTasks(),

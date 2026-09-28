@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">calendar. widget</string>
+    <string name="widget_name">calendar.</string>
+    <string name="widget_description">What\'s on today and the next few days</string>
+</resources>
