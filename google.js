@@ -28,15 +28,27 @@ export const isConnected = () => { const a = auth(); return Boolean(a.token && a
 export const wasConnected = () => Boolean(auth().email);
 export const silentTried = () => { try { return sessionStorage.getItem(SILENT_KEY) === "1"; } catch { return true; } };
 
+// Google refuses to show its sign-in page inside a frame (a bare 403). When
+// calendar. is framed by a page on this site, such as the lifeos picker, the
+// whole page goes to Google instead and Google returns to that page, which
+// hands the reply back to this frame. That page's address must also be an
+// authorised redirect URI on the OAuth client.
+function sameSiteTop() {
+  try {
+    return window.top !== window && window.top.location.origin === location.origin ? window.top : null;
+  } catch { return null; }
+}
+
 export function connect(clientId, { silent = false } = {}) {
   const state = crypto.randomUUID();
   try {
     sessionStorage.setItem(STATE_KEY, state);
     if (silent) sessionStorage.setItem(SILENT_KEY, "1");
   } catch { /* private mode: the state check below will fail safe */ }
+  const page = sameSiteTop() || window;
   const params = new URLSearchParams({
     client_id: clientId.trim(),
-    redirect_uri: location.origin + location.pathname,
+    redirect_uri: page.location.origin + page.location.pathname,
     response_type: "token",
     scope: SCOPE,
     include_granted_scopes: "true",
@@ -45,7 +57,7 @@ export function connect(clientId, { silent = false } = {}) {
   if (silent) params.set("prompt", "none");
   const email = auth().email;
   if (email) params.set("login_hint", email);
-  location.assign(`${AUTH}?${params}`);
+  page.location.assign(`${AUTH}?${params}`);
 }
 
 // Called once on load. Returns null when the page wasn't opened by Google,

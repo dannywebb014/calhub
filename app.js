@@ -813,7 +813,7 @@ function openSettings() {
         <li>APIs &amp; Services → Library → turn on <b>Google Calendar API</b>.</li>
         <li>OAuth consent screen → External, add your email as a test user, then <b>Publish app</b>. Left in testing, Google makes you sign in again every week.</li>
         <li>Credentials → Create credentials → OAuth client ID → <b>Web application</b>.</li>
-        <li>Authorised JavaScript origin: <code>${esc(location.origin)}</code><br>Authorised redirect URI: <code>${esc(redirect)}</code></li>
+        <li>Authorised JavaScript origin: <code>${esc(location.origin)}</code><br>Authorised redirect URIs: <code>${esc(redirect)}</code> and, for signing in from the lifeOS picker, <code>${esc(location.origin + "/lifeos/")}</code></li>
         <li>Paste the client ID above and tap Connect. Google will warn the app is unverified; that’s expected for your own app.</li>
       </ol></details>
     </section>

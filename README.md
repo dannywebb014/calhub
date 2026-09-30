@@ -16,7 +16,9 @@ Try it without connecting anything at `?demo`.
 **Google Calendar.** Settings → paste an OAuth client ID → Connect. To make a client ID: in Google Cloud Console, turn on the Google Calendar API, set up the OAuth consent screen (External, then **Publish app**; left in testing, Google asks you to sign in again every week), and create an OAuth client ID of type *Web application* with:
 
 - Authorised JavaScript origin: `https://dannywebb014.github.io`
-- Authorised redirect URI: `https://dannywebb014.github.io/calhub/`
+- Authorised redirect URIs: `https://dannywebb014.github.io/calhub/` and `https://dannywebb014.github.io/lifeos/`
+
+Google won't show its sign-in page inside a frame, so when calendar. runs inside the lifeOS picker (`lifeos` repo) the whole picker page goes to Google and comes back to `/lifeos/`, which passes the reply into the calendar. frame.
 
 Sign-in is a redirect to Google rather than a popup, since popups are unreliable in a home-screen app on iPhone. Google's token lasts an hour. After that the page goes back through Google with `prompt=none`, which returns straight away as long as you're still signed in to Google in that browser.
 
