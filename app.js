@@ -1421,11 +1421,12 @@ $("next").addEventListener("click", () => step(1));
 $("title").addEventListener("click", () => { if (wide.matches) return; S.stripMonth = !S.stripMonth; renderTop(); renderStrip(); });
 $("settings-btn").addEventListener("click", openSettings);
 $("add-btn").addEventListener("click", () => openAdd());
-$("tasks-btn").addEventListener("click", () => {
+function toggleTasks() {
   settings.showTasks = !settings.showTasks;
   saveSettings();
   render();
-});
+}
+$("tasks-btn").addEventListener("click", toggleTasks);
 function toggleSide() {
   if (!wide.matches) return;
   settings.sideOpen = !settings.sideOpen;
@@ -1440,7 +1441,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && S.sheet) { closeSheet(); return; }
   if (S.sheet || e.metaKey || e.ctrlKey || e.altKey || e.target.closest("input, textarea, select")) return;
   const keys = {
-    t: () => select(D.today()), d: () => setView("day"), w: () => setView("week"), m: () => setView("month"),
+    ".": () => select(D.today()), t: toggleTasks, d: () => setView("day"), w: () => setView("week"), m: () => setView("month"),
     l: () => setView("agenda"), ArrowLeft: () => step(-1), ArrowRight: () => step(1),
     n: () => openAdd(), "/": () => qa.focus(), s: toggleSide,
   };
