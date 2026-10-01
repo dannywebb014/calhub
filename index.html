@@ -32,7 +32,7 @@
       --text:#2c2218; --muted:#6b6055; --dim:#a8a295;
       --logo:#2f6aa3; --accent:#3b7bbf; --accent-text:#2a5f96; --accent-soft:#3b7bbf16;
       --danger:#b54e4e; --danger-soft:#b54e4e14; --success:#4a7c4a;
-      --sp-my:#2a7d77; --sp-work:#a0672e; --sp-todoist:#3f7a4a;
+      --sp-my:#2a7d77; --sp-work:#a0672e; --sp-todoist:#3f7a4a; --glow:.28;
       --shadow:0 1px 3px rgba(44,34,24,.06); --shadow-lg:0 18px 50px rgba(44,34,24,.18);
       --hour:48px;
       --disp:'Lora', Georgia, serif;
@@ -46,7 +46,7 @@
         --text:#ebe8de; --muted:#a8a89c; --dim:#6f7468;
         --logo:#a9cdf2; --accent:#6fa8e0; --accent-text:#a9cdf2; --accent-soft:#6fa8e022;
         --danger:#d27a7a; --danger-soft:#d27a7a1f; --success:#6bba6b;
-        --sp-my:#4fa8a0; --sp-work:#d99a5b; --sp-todoist:#7cc48a;
+        --sp-my:#4fa8a0; --sp-work:#d99a5b; --sp-todoist:#7cc48a; --glow:.22;
         --shadow:0 1px 4px rgba(0,0,0,.35); --shadow-lg:0 18px 50px rgba(0,0,0,.5);
         color-scheme:dark;
       }
@@ -56,7 +56,7 @@
       --text:#ebe8de; --muted:#a8a89c; --dim:#6f7468;
       --logo:#a9cdf2; --accent:#6fa8e0; --accent-text:#a9cdf2; --accent-soft:#6fa8e022;
       --danger:#d27a7a; --danger-soft:#d27a7a1f; --success:#6bba6b;
-      --sp-my:#4fa8a0; --sp-work:#d99a5b; --sp-todoist:#7cc48a;
+      --sp-my:#4fa8a0; --sp-work:#d99a5b; --sp-todoist:#7cc48a; --glow:.22;
       --shadow:0 1px 4px rgba(0,0,0,.35); --shadow-lg:0 18px 50px rgba(0,0,0,.5);
       color-scheme:dark;
     }
@@ -73,6 +73,21 @@
     [hidden] { display:none !important; }
     .dot-accent { color:var(--accent); }
 
+    /* Two soft glows drifting behind the page, as on the lifeOS. picker, tasks. and media.:
+       calendar.'s blue and work.'s amber. */
+    .glow { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+    .glow::before, .glow::after {
+      content:""; position:absolute; width:80vmax; height:80vmax; border-radius:50%;
+      opacity:var(--glow); animation:drift 18s ease-in-out infinite alternate;
+    }
+    .glow::before { left:-40vmax; top:-30vmax; background:radial-gradient(circle, var(--accent) 0%, transparent 62%); }
+    .glow::after {
+      right:-45vmax; bottom:-40vmax; background:radial-gradient(circle, var(--sp-work) 0%, transparent 62%);
+      animation-duration:23s; animation-direction:alternate-reverse;
+    }
+    @keyframes drift { to { transform:translate(12vmax, 10vmax) scale(1.15); } }
+    @media (prefers-reduced-motion: reduce) { .glow::before, .glow::after { animation:none; } }
+
     /* ── Shell ──
        Phone: one column — header, view switcher, week strip, then the agenda
        or the grid, with quick add along the bottom. The sidebar and main
@@ -80,6 +95,7 @@
        Desktop: the sidebar holds the month, the inbox and the agenda; the
        main side holds the day/week/month grid. */
     .shell {
+      position:relative; z-index:1;
       height:100dvh; display:grid; grid-template-columns:minmax(0,1fr);
       grid-template-rows:auto auto auto auto minmax(0,1fr) auto;
       grid-template-areas:"top" "views" "strip" "banner" "content" "quick";
@@ -96,7 +112,7 @@
 
     @media (min-width: 960px) {
       .shell { grid-template-columns:272px minmax(0,1fr); grid-template-rows:minmax(0,1fr); grid-template-areas:"side main"; }
-      .side { display:flex; flex-direction:column; grid-area:side; min-height:0; border-right:1px solid var(--line); background:var(--hover); }
+      .side { display:flex; flex-direction:column; grid-area:side; min-height:0; border-right:1px solid var(--line); background:color-mix(in srgb, var(--hover) 55%, transparent); }
       .main { display:flex; flex-direction:column; grid-area:main; min-height:0; }
       #mini, .side-logo { display:block; }
       #tray-inline { display:block; }
@@ -216,9 +232,9 @@
     .a-day { padding:0 16px; }
     .a-head {
       position:sticky; top:0; z-index:2; display:flex; align-items:baseline; gap:8px; margin:0 -16px; padding:12px 18px 6px;
-      background:color-mix(in srgb, var(--bg) 92%, transparent); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+      background:color-mix(in srgb, var(--bg) 20%, transparent); -webkit-backdrop-filter:blur(18px); backdrop-filter:blur(18px);
     }
-    .side .a-head { background:color-mix(in srgb, var(--hover) 92%, transparent); }
+    .side .a-head { background:color-mix(in srgb, var(--hover) 20%, transparent); }
     .a-head .dow { font-family:var(--disp); font-size:17px; font-weight:600; letter-spacing:-.2px; }
     .a-head .date { font-size:14px; color:var(--muted); }
     .a-head .tag { margin-left:auto; font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--accent-text); }
@@ -348,7 +364,7 @@
     @media (min-width: 960px) { .m-list { display:none; } }
 
     /* ── Quick add ── */
-    #quick { padding:8px 12px calc(8px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:var(--bg); }
+    #quick { padding:8px 12px calc(8px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); background:color-mix(in srgb, var(--bg) 70%, transparent); -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px); }
     .qa-row { display:flex; gap:8px; align-items:center; }
     .qa-input {
       flex:1; min-width:0; height:44px; padding:0 14px 0 40px; border-radius:22px; border:1px solid var(--line-strong);
@@ -578,6 +594,7 @@
   </style>
 </head>
 <body>
+  <div class="glow" aria-hidden="true"></div>
   <div class="shell" id="shell" data-view="agenda">
     <aside class="side">
       <div class="side-logo"><h1 class="logo">calendar<span class="dot-accent">.</span></h1></div>
