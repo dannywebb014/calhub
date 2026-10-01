@@ -1482,7 +1482,14 @@ initDrag({
 });
 
 // ─── Start ───────────────────────────────────────────────────────────
-wide.addEventListener("change", () => { render(); scrollAgendaTo(S.day); });
+// On a desktop the quick-add bar moves up into the header; on a phone it sits along the bottom.
+function placeQuick() {
+  const quick = $("quick");
+  if (wide.matches) $("top").insertBefore(quick, $("top").querySelector(".acts"));
+  else $("grid").before(quick);
+}
+placeQuick();
+wide.addEventListener("change", () => { placeQuick(); render(); scrollAgendaTo(S.day); });
 
 // Keep "now" and "today" right while the page stays open.
 let shownDay = D.today();
