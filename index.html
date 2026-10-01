@@ -24,7 +24,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,600&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://dannywebb014.github.io/lifeos/fonts.css">
   <style>
     /* My Hub neutrals and type, with calendar.'s blue as the accent. */
     :root {
@@ -35,8 +35,8 @@
       --sp-my:#2a7d77; --sp-work:#a0672e; --sp-todoist:#3f7a4a; --glow:.28;
       --shadow:0 1px 3px rgba(44,34,24,.06); --shadow-lg:0 18px 50px rgba(44,34,24,.18);
       --hour:48px;
-      --disp:'Lora', Georgia, serif;
-      --body:'Source Sans 3', system-ui, -apple-system, Helvetica, Arial, sans-serif;
+      --disp:var(--hub-head, 'Lora', Georgia, serif);
+      --body:var(--hub-body, 'Source Sans 3', system-ui, -apple-system, Helvetica, Arial, sans-serif);
       color-scheme:light;
     }
     /* Dark follows the system unless Settings → Appearance picks one. */
