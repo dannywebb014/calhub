@@ -18,7 +18,7 @@ const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 // than in the repo so the page works with whichever Google project you use.
 const SETTINGS_KEY = DEMO ? "calendar.demo" : "calendar.settings";
 function loadSettings() {
-  const base = { hidden: [], hiddenSpaces: [], view: "agenda", clientId: "", defaultCal: "", trayOpen: true, showTasks: true, theme: "auto" };
+  const base = { hidden: [], hiddenSpaces: [], view: "agenda", clientId: "", defaultCal: "", trayOpen: true, showTasks: true, sideOpen: true, theme: "auto" };
   try { return { ...base, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") }; } catch { return base; }
 }
 let settings = loadSettings();
@@ -182,7 +182,10 @@ function renderTop() {
   $("inbox-badge").hidden = !n;
   $("inbox-badge").textContent = n;
   $("today-num").textContent = Number(D.today().slice(8));
-  $("inbox-btn").hidden = wide.matches;
+  // With the sidebar hidden on a desktop, its unscheduled tray is reached from the header instead.
+  $("inbox-btn").hidden = wide.matches && settings.sideOpen;
+  $("shell").classList.toggle("side-off", !settings.sideOpen);
+  $("side-btn").setAttribute("aria-pressed", settings.sideOpen);
   $("inbox-btn").disabled = !settings.showTasks;
   $("tasks-btn").setAttribute("aria-pressed", settings.showTasks);
 }
@@ -1423,6 +1426,13 @@ $("tasks-btn").addEventListener("click", () => {
   saveSettings();
   render();
 });
+function toggleSide() {
+  if (!wide.matches) return;
+  settings.sideOpen = !settings.sideOpen;
+  saveSettings();
+  render();
+}
+$("side-btn").addEventListener("click", toggleSide);
 $("inbox-btn").addEventListener("click", () => { openSheet("tray"); fillTraySheet(); });
 $("sheet-back").addEventListener("click", closeSheet);
 
@@ -1432,7 +1442,7 @@ document.addEventListener("keydown", (e) => {
   const keys = {
     t: () => select(D.today()), d: () => setView("day"), w: () => setView("week"), m: () => setView("month"),
     l: () => setView("agenda"), ArrowLeft: () => step(-1), ArrowRight: () => step(1),
-    n: () => openAdd(), "/": () => qa.focus(),
+    n: () => openAdd(), "/": () => qa.focus(), s: toggleSide,
   };
   if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
 });
