@@ -861,7 +861,7 @@ function openTask(id) {
     <p class="f-note" style="margin:6px 2px 0">A time blocks it out on your main calendar.</p>
     ${late ? `<p class="f-note late" style="margin-top:8px">Overdue: it was due ${esc(D.relative(t.date))}.</p>` : ""}
     ${tk.isLocked(t) ? `<p class="f-note" style="margin-top:8px">${esc(T.lockedHelp(t))}</p>` : ""}
-    <div class="sh-foot"><a class="btn" href="${T.TASKS_APP}">Open tasks.</a><span class="spacer"></span><button class="btn primary" data-act="tick">Tick off</button></div>
+    <div class="sh-foot"><a class="btn" href="${T.TASKS_APP}">Open tasks.</a>${blockOf(t) ? `<button class="btn" data-act="event">Event</button>` : ""}<span class="spacer"></span><button class="btn primary" data-act="tick">Tick off</button></div>
   </div>`);
   node.querySelector("h2").textContent = t.text;
   const date = node.querySelector("input[type=date]");
@@ -874,26 +874,40 @@ function openTask(id) {
   }
   date.value = block?.startDay || t.date || "";
   time.value = block ? D.hhmm(block.start) : "";
-  // With a block, a new date takes the block along at the same time.
+  // A new date is saved straight away and the sheet stays open, so a time
+  // can be set next. With a block, the date takes the block along at the
+  // same time.
   date.onchange = () => {
     if (!date.value) return;
-    closeSheet();
-    if (block) moveEvent(block, { date: date.value, minute: D.minutesInto(block.startDay, block.start) });
+    const b = blockOf(t);
+    if (b) moveEvent(b, { date: date.value, minute: D.minutesInto(b.startDay, b.start) });
     else moveTask(t, date.value);
   };
-  // Saved with the button rather than on change, which some browsers fire
-  // after the hour is typed and before the minutes.
+  // A time is saved with the button rather than on change, which some
+  // browsers fire after the hour is typed and before the minutes. With the
+  // time cleared, the button takes the block away instead.
   const blockBtn = node.querySelector("[data-act=block]");
-  const ready = () => { blockBtn.disabled = !time.value; blockBtn.classList.toggle("primary", Boolean(time.value)); };
+  const ready = () => {
+    const remove = !time.value && Boolean(blockOf(t));
+    blockBtn.textContent = remove ? "Remove time" : "Block";
+    blockBtn.disabled = !time.value && !remove;
+    blockBtn.classList.toggle("primary", Boolean(time.value));
+    blockBtn.classList.toggle("danger", remove);
+  };
   time.oninput = ready;
   time.onchange = ready;
   ready();
   blockBtn.onclick = () => {
-    if (!time.value) return;
-    const [h, m] = time.value.split(":").map(Number);
     closeSheet();
+    if (!time.value) {
+      const b = blockOf(t);
+      if (b) { removeBlock(b); toast(`Removed the time for ${t.text}. It stays on ${D.relative(b.startDay)}.`); }
+      return;
+    }
+    const [h, m] = time.value.split(":").map(Number);
     timeBlock(t, date.value || t.date || D.today(), h * 60 + m, Number(len.value));
   };
+  node.querySelector("[data-act=event]")?.addEventListener("click", () => { const b = blockOf(t); if (b) openEvent(b.key); });
   node.querySelector("[data-act=tick]").onclick = () => { closeSheet(); tick(t); };
   openSheet("task", node);
 }
@@ -1580,7 +1594,10 @@ document.addEventListener("click", (e) => {
   const open = t.closest("[data-open]");
   if (open) {
     const [kind, ...rest] = open.dataset.open.split(":");
-    if (kind === "event") openEvent(rest.join(":"));
+    // An open task's time block opens the task, which can change its time.
+    const ev = kind === "event" ? S.events.get(rest.join(":")) : null;
+    if (ev?.taskId && !ev.taskDone && findTask(ev.taskId)) openTask(ev.taskId);
+    else if (kind === "event") openEvent(rest.join(":"));
     else openTask(rest.join(":"));
     return;
   }
