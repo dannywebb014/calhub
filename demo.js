@@ -20,9 +20,14 @@ function ev(calId, title, start, end, extra = {}) {
     key: `${calId}|d${++n}`, id: `d${n}`, calendarId: calId, title, allDay, start, end,
     startDay: D.iso(start), endDay: allDay ? D.addDays(D.iso(end), -1) : D.iso(new Date(end - 1)),
     color: cal.color, location: "", description: "", video: null, attendees: [], organizer: null,
-    htmlLink: null, recurring: false, editable: cal.writable, ...extra,
+    htmlLink: null, recurring: false, editable: cal.writable, taskId: null, taskSpace: null, taskDone: false, ...extra,
   };
 }
+// The task link that google.js keeps in an event's private properties.
+const link = (f) => ({
+  ...(f.task ? { taskId: f.task.id, taskSpace: f.task.spaceId } : {}),
+  ...("taskDone" in f ? { taskDone: f.taskDone } : {}),
+});
 const day = (offset) => D.parse(D.addDays(D.today(), offset));
 
 let events = [];
@@ -55,6 +60,7 @@ function seed() {
     ev("me", "Haircut", at(-1, 17), at(-1, 17, 45)),
     ev("work", "Planning day", day(6), day(7), { allDay: true }),
     ev("me", "Cinema", at(4, 19, 30), at(4, 22)),
+    ev("me", "Send Sam the invoice", at(0, 15), at(0, 16), { taskId: "t1", taskSpace: "work" }),
   );
 }
 seed();
@@ -67,17 +73,18 @@ export const calendar = {
     failed: [],
   }),
   createEvent: async (cal, f) => {
-    const e = ev(cal.id, f.title, f.start, f.end, { allDay: f.allDay, location: f.location || "", description: f.description || "" });
+    const e = ev(cal.id, f.title, f.start, f.end, { allDay: f.allDay, location: f.location || "", description: f.description || "", ...link(f) });
     events.push(e);
     return { ...e };
   },
   updateEvent: async (event, f, cal, toCal) => {
     const i = events.findIndex(e => e.key === event.key);
-    const merged = { ...events[i], ...f };
+    const merged = { ...events[i], ...f, ...link(f) };
     const target = toCal || cal;
     const e = ev(target.id, merged.title, merged.start, merged.end, {
       allDay: merged.allDay, location: merged.location, description: merged.description,
       video: merged.video, attendees: merged.attendees, recurring: merged.recurring,
+      taskId: merged.taskId, taskSpace: merged.taskSpace, taskDone: merged.taskDone,
     });
     events[i] = e;
     return { ...e };
@@ -98,7 +105,7 @@ let tasks = [
 ];
 
 export const taskSource = {
-  loadTasks: async () => ({ tasks: tasks.map(t => ({ ...t })), failed: [] }),
+  loadTasks: async () => ({ tasks: tasks.map(t => ({ ...t })), failed: [], loaded: ["my", "work", "todoist"] }),
   completeTask: async (task) => { tasks = tasks.filter(t => t.id !== task.id); },
   rescheduleTask: async (task, date) => { tasks.find(t => t.id === task.id).date = date; },
   addTask: async ({ text, space, date }) => { tasks.push({ id: `t${Date.now()}`, text, date, spaceId: space, where: { label: "Inbox" } }); },

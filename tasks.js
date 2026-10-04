@@ -58,10 +58,13 @@ const canEditDocs = {};
 let projects = [];
 
 // Every open task: dated ones for the calendar, undated ones for the inbox tray.
+// `loaded` lists the spaces that came back whole, so a task missing from one
+// of them is known to be done (or gone), not just unreachable.
 export async function loadTasks() {
   todoist.setToken(settings().todoist?.token);
   const found = new Map();
   const failed = [];
+  const loaded = [];
   const jobs = SPACES.filter(s => !isTodoist(s.id) && isConfigured(s.id)).map(async (space) => {
     craft(space.id, "/documents?limit=1")
       .then(() => { canEditDocs[space.id] = true; })
@@ -82,6 +85,7 @@ export async function loadTasks() {
           });
         }
       }
+      loaded.push(space.id);
     } catch (err) {
       console.error(`Loading ${spaceLabel(space.id)} tasks failed:`, err);
       failed.push(spaceLabel(space.id));
@@ -94,6 +98,7 @@ export async function loadTasks() {
         for (const t of await todoist.loadTasks(projects)) {
           found.set(t.id, { ...t, where: { label: t.where.label, inDoc: false } });
         }
+        loaded.push("todoist");
       } catch (err) {
         console.error("Loading Todoist tasks failed:", err);
         failed.push(spaceLabel("todoist"));
@@ -101,7 +106,7 @@ export async function loadTasks() {
     })());
   }
   await Promise.all(jobs);
-  return { tasks: [...found.values()], failed };
+  return { tasks: [...found.values()], failed, loaded };
 }
 
 // Ticking off or moving a task in a document needs an "All Documents" connection.

@@ -170,6 +170,11 @@ function normalise(e, cal) {
     htmlLink: e.htmlLink,
     recurring: Boolean(e.recurringEventId),
     editable: cal.writable && !e.locked,
+    // A time block for a task carries the task's ID, so it can be found
+    // again from any device. See "Time blocks" in app.js.
+    taskId: e.extendedProperties?.private?.calhubTask || null,
+    taskSpace: e.extendedProperties?.private?.calhubSpace || null,
+    taskDone: e.extendedProperties?.private?.calhubDone === "1",
   };
 }
 
@@ -205,7 +210,8 @@ export async function loadEvents(calendars, from, to) {
 
 const zone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-// { title, allDay, start: Date, end: Date, location, description } → Google's shape.
+// { title, allDay, start: Date, end: Date, location, description, task, taskDone }
+// → Google's shape.
 // A PATCH switching between all-day and timed has to clear the other field,
 // which is done by sending it as null; a new event leaves it out.
 function body(fields, patch = false) {
@@ -220,6 +226,12 @@ function body(fields, patch = false) {
     out.start = when(fields.start);
     out.end = when(fields.end);
   }
+  // PATCH merges private properties key by key, so marking a block done
+  // leaves its task link alone.
+  const link = {};
+  if (fields.task) Object.assign(link, { calhubTask: fields.task.id, calhubSpace: fields.task.spaceId });
+  if ("taskDone" in fields) link.calhubDone = fields.taskDone ? "1" : "0";
+  if (Object.keys(link).length) out.extendedProperties = { private: link };
   return out;
 }
 

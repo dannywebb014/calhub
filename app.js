@@ -55,6 +55,7 @@ const S = {
   loaded: null,                // { from, to } of events fetched so far
   tasks: [],
   tasksLoaded: false,
+  taskSpacesOk: new Set(),     // task lists that loaded in full last time
   agenda: null,                // { from, to } of days in the list
   sheet: null,                 // which sheet is open
   qaKind: null,                // event/task chosen by hand in quick add
@@ -114,7 +115,7 @@ const setBusy = (on) => { busy = Math.max(0, busy + (on ? 1 : -1)); $("busy").hi
 // Rebuilt before every paint. An event appears on every day it touches.
 // A task appears on its date, and an overdue one on today, since it still
 // needs doing today.
-let index = { evs: new Map(), tasks: new Map(), undated: [] };
+let index = { evs: new Map(), tasks: new Map(), undated: [], blocks: new Map() };
 const byTime = (a, b) =>
   (b.allDay - a.allDay) || (a.start - b.start) || ((b.end - b.start) - (a.end - a.start)) || a.title.localeCompare(b.title);
 const spaceOrder = (id) => T.SPACES.findIndex(s => s.id === id);
@@ -123,8 +124,13 @@ function reindex() {
   const hidden = new Set(settings.hidden);
   const hiddenSpaces = new Set(settings.hiddenSpaces);
   const evs = new Map();
+  const blocks = new Map();
   for (const e of S.events.values()) {
     if (hidden.has(e.calendarId)) continue;
+    if (e.taskId) {
+      if (!blocks.has(e.taskId)) blocks.set(e.taskId, []);
+      blocks.get(e.taskId).push(e);
+    }
     for (let d = e.startDay, n = 0; d <= e.endDay && n < 400; d = D.addDays(d, 1), n++) {
       if (!evs.has(d)) evs.set(d, []);
       evs.get(d).push(e);
@@ -138,20 +144,37 @@ function reindex() {
     if (hiddenSpaces.has(t.spaceId)) continue;
     if (!t.date) { undated.push(t); continue; }
     const d = t.date < today ? today : t.date;
+    // A task with a time block that day is shown as the block instead.
+    if (blocks.get(t.id)?.some(e => !e.taskDone && e.startDay === d)) continue;
     if (!tasks.has(d)) tasks.set(d, []);
     tasks.get(d).push(t);
   }
   const order = (a, b) => (a.date || "").localeCompare(b.date || "") || spaceOrder(a.spaceId) - spaceOrder(b.spaceId) || a.text.localeCompare(b.text);
   for (const list of tasks.values()) list.sort(order);
   undated.sort(order);
-  index = { evs, tasks, undated };
+  index = { evs, tasks, undated, blocks };
 }
 const eventsOn = (d) => index.evs.get(d) || [];
 const tasksOn = (d) => index.tasks.get(d) || [];
 
+// ─── Time blocks ─────────────────────────────────────────────────────
+// Giving a task a time makes an event on the main calendar that carries the
+// task's ID (google.js keeps it in the event's private properties). So the
+// block is saved once and shows everywhere: on every device, in Google
+// Calendar and on the Android widget. The task keeps its plain date, which
+// follows the block's day. Here a block is drawn as its task, with a tick,
+// in the task list's colour.
+const blockCalendar = () => writableCalendars().find(c => c.primary) || defaultCalendar();
+// Done when ticked off here, or when its task has gone from a list that loaded.
+const blockDone = (e) => e.taskDone || (S.tasksLoaded && !findTask(e.taskId) && S.taskSpacesOk.has(e.taskSpace));
+const colourOf = (e) => (e.taskId && e.taskSpace ? spaceColour(e.taskSpace) : e.color);
+// The task's latest block that isn't done, if one has been loaded.
+const blockOf = (t) => (index.blocks.get(t.id) || []).filter(e => !e.taskDone).sort((a, b) => b.start - a.start)[0] || null;
+const blockMinutes = (t) => { const b = blockOf(t); return b ? Math.round((b.end - b.start) / 60000) : 60; };
+
 // Up to three dots under a day: its calendars' colours, then its task lists'.
 function dots(d) {
-  const colours = [...new Set([...eventsOn(d).map(e => e.color), ...tasksOn(d).map(t => spaceColour(t.spaceId))])].slice(0, 3);
+  const colours = [...new Set([...eventsOn(d).map(colourOf), ...tasksOn(d).map(t => spaceColour(t.spaceId))])].slice(0, 3);
   return colours.map(c => `<i style="--c:${esc(c)}"></i>`).join("");
 }
 
@@ -337,6 +360,7 @@ function eventWhen(e, d) {
 }
 
 function eventRow(e, d) {
+  if (e.taskId) return blockRow(e, d);
   const row = document.createElement("div");
   row.className = `a-row${e.end < new Date() ? " ended" : ""}`;
   row.style.setProperty("--c", e.color);
@@ -348,6 +372,23 @@ function eventRow(e, d) {
   if (e.recurring) bits.push(`<span>${I.repeat}</span>`);
   row.innerHTML = `${eventWhen(e, d)}<div class="bar"></div><div class="body"><div class="title"></div>${bits.length ? `<div class="sub">${bits.join("")}</div>` : ""}</div>`;
   row.querySelector(".title").textContent = e.title;
+  return row;
+}
+
+// A time block: its time, then a tick and the task, as a task row would show it.
+function blockRow(e, d) {
+  const done = blockDone(e);
+  const t = findTask(e.taskId);
+  const row = document.createElement("div");
+  row.className = `a-row block${done ? " done" : ""}${e.end < new Date() ? " ended" : ""}${t && tk.isLocked(t) ? " locked" : ""}`;
+  row.style.setProperty("--c", colourOf(e));
+  row.dataset.open = `event:${e.key}`;
+  if (e.editable) row.dataset.drag = `event:${e.key}`;
+  const where = t ? `<span>${esc(t.where.label)}</span>` : "";
+  row.innerHTML = `${eventWhen(e, d)}<div class="bar"></div><div class="tick-cell"><button class="tick" aria-label="Tick off">${I.check}</button></div>
+    <div class="body"><div class="title"></div><div class="sub">${e.taskSpace ? `<span class="sp">${esc(T.spaceLabel(e.taskSpace))}</span>` : ""}${where}</div></div>`;
+  row.querySelector(".title").textContent = e.title;
+  row.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tickBlock(e); };
   return row;
 }
 
@@ -427,11 +468,12 @@ function renderTimeline(box, days, v) {
       const e = it.e;
       const mins = it.en - it.s;
       const b = document.createElement("div");
-      b.className = `ev${mins < 45 ? " short" : ""}${e.end < now ? " past" : ""}`;
-      b.style.cssText = `top:${(it.s / 1440) * 100}%;height:calc(${(mins / 1440) * 100}% - 2px);left:calc(${(it.col / it.cols) * 100}% + 2px);width:calc(${100 / it.cols}% - 4px);--c:${e.color}`;
+      b.className = `ev${mins < 45 ? " short" : ""}${e.end < now ? " past" : ""}${e.taskId ? " block" : ""}${e.taskId && blockDone(e) ? " done" : ""}`;
+      b.style.cssText = `top:${(it.s / 1440) * 100}%;height:calc(${(mins / 1440) * 100}% - 2px);left:calc(${(it.col / it.cols) * 100}% + 2px);width:calc(${100 / it.cols}% - 4px);--c:${colourOf(e)}`;
       b.dataset.open = `event:${e.key}`;
       if (e.editable) b.dataset.drag = `event:${e.key}`;
-      b.innerHTML = `<b></b><small>${D.time(e.start)}${mins >= 45 ? ` – ${D.time(e.end)}` : ""}</small>`;
+      b.innerHTML = `${e.taskId ? `<button class="tick" aria-label="Tick off">${I.checkSmall}</button>` : ""}<b></b><small>${D.time(e.start)}${mins >= 45 ? ` – ${D.time(e.end)}` : ""}</small>`;
+      b.querySelector(".tick")?.addEventListener("click", (ev) => { ev.stopPropagation(); tickBlock(e); });
       b.querySelector("b").textContent = e.title;
       if (mins >= 75 && e.location) b.insertAdjacentHTML("beforeend", `<small style="display:block">${esc(e.location.split("\n")[0])}</small>`);
       col.append(b);
@@ -452,6 +494,7 @@ function renderTimeline(box, days, v) {
 }
 
 function eventChip(e, d) {
+  if (e.taskId) return blockChip(e);
   const chip = document.createElement("button");
   chip.className = `chip${e.startDay < d ? " cont-l" : ""}${e.endDay > d ? " cont-r" : ""}`;
   chip.style.setProperty("--c", e.color);
@@ -459,6 +502,18 @@ function eventChip(e, d) {
   if (e.editable) chip.dataset.drag = `event:${e.key}`;
   chip.innerHTML = `<span></span>`;
   chip.firstChild.textContent = e.title;
+  return chip;
+}
+
+function blockChip(e) {
+  const chip = document.createElement("div");
+  chip.className = `chip task block${blockDone(e) ? " done" : ""}`;
+  chip.style.setProperty("--c", colourOf(e));
+  chip.dataset.open = `event:${e.key}`;
+  if (e.editable) chip.dataset.drag = `event:${e.key}`;
+  chip.innerHTML = `<button class="tick" aria-label="Tick off">${I.checkSmall}</button><span></span>`;
+  chip.querySelector("span").textContent = e.title;
+  chip.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tickBlock(e); };
   return chip;
 }
 
@@ -492,7 +547,7 @@ function renderMonth(box) {
     } else {
       for (const e of eventsOn(d)) {
         const chip = eventChip(e, d);
-        if (!e.allDay && e.startDay === d) chip.insertAdjacentHTML("afterbegin", `<span class="t">${D.time(e.start)}</span>`);
+        if (!e.allDay && e.startDay === d) chip.lastElementChild.insertAdjacentHTML("beforebegin", `<span class="t">${D.time(e.start)}</span>`);
         cell.append(chip);
       }
       for (const t of tasksOn(d)) cell.append(taskChip(t));
@@ -538,7 +593,7 @@ function trayItems() {
     list.innerHTML = `<p class="tray-hint">Nothing unscheduled. Nice.</p>`;
     return list;
   }
-  list.innerHTML = `<p class="tray-hint">${wide.matches ? "Drag a task onto a day to schedule it." : "Press and hold a task, then drag it onto a day. Or pick a date."}</p>`;
+  list.innerHTML = `<p class="tray-hint">${wide.matches ? "Drag a task onto a day, or onto a time to block it out." : "Press and hold a task, then drag it onto a day or a time. Or pick a date."}</p>`;
   for (const t of index.undated) {
     const item = html(`<div class="tray-item" data-drag="task:${esc(t.id)}" data-open="task:${esc(t.id)}" style="--c:${spaceColour(t.spaceId)}">
       <span class="grip">${I.grip}</span>
@@ -640,32 +695,43 @@ function openEvent(key) {
   }
   const notes = notesText(e.description);
   if (notes) rows.push(`<div class="d-row">${I.notes}<div class="grow notes">${linkify(notes)}</div></div>`);
+  // A time block names its task, and can tick it off.
+  const task = e.taskId ? findTask(e.taskId) : null;
+  const done = e.taskId && blockDone(e);
+  if (e.taskId) {
+    const list = e.taskSpace ? T.spaceLabel(e.taskSpace) : "Task";
+    rows.unshift(`<div class="d-cal" style="--c:${colourOf(e)}"><i style="border-radius:50%"></i>Time block for a task · ${esc(list)}${task ? ` · ${esc(task.where.label)}` : ""}${done ? " · done" : ""}</div>`);
+  }
 
   const node = html(`<div>
-    <div class="sh-head" style="--c:${esc(e.color)}"><span class="swatch"></span><h2></h2><button class="x-btn" data-close aria-label="Close">${I.x}</button></div>
+    <div class="sh-head" style="--c:${esc(colourOf(e))}"><span class="swatch"${e.taskId ? ` style="border-radius:50%"` : ""}></span><h2></h2><button class="x-btn" data-close aria-label="Close">${I.x}</button></div>
     <p class="d-when">${whenText(e)}</p>
     <div class="d-cal" style="--c:${esc(c?.color || e.color)}"><i></i>${esc(c?.name || "")}${e.recurring ? ` · ${I.repeat} repeats` : ""}</div>
     ${rows.join("")}
     <div class="sh-foot">
-      ${e.editable ? `<button class="btn danger" data-act="delete">Delete</button>` : ""}
+      ${e.editable ? `<button class="btn danger" data-act="delete">${e.taskId ? "Remove block" : "Delete"}</button>` : ""}
       <span class="spacer"></span>
       ${e.htmlLink ? `<a class="btn" href="${esc(e.htmlLink)}" target="_blank" rel="noopener">Google</a>` : ""}
-      ${e.editable ? `<button class="btn primary" data-act="edit">Edit</button>` : ""}
+      ${e.editable ? `<button class="btn${e.taskId && !done ? "" : " primary"}" data-act="edit">Edit</button>` : ""}
+      ${e.taskId && !done ? `<button class="btn primary" data-act="tick">Tick off</button>` : ""}
     </div></div>`);
   node.querySelector("h2").textContent = e.title;
   node.querySelector("[data-act=edit]")?.addEventListener("click", () => openEditor(e));
   node.querySelector("[data-act=delete]")?.addEventListener("click", () => removeEvent(e));
+  node.querySelector("[data-act=tick]")?.addEventListener("click", () => { closeSheet(); tickBlock(e); });
   openSheet("event", node);
 }
 
 async function removeEvent(e) {
-  if (!confirm(e.recurring ? `Delete “${e.title}”? Only this occurrence is deleted.` : `Delete “${e.title}”?`)) return;
+  const ask = e.taskId ? `Remove the time block for “${e.title}”? The task stays.`
+    : e.recurring ? `Delete “${e.title}”? Only this occurrence is deleted.` : `Delete “${e.title}”?`;
+  if (!confirm(ask)) return;
   closeSheet();
   S.events.delete(e.key);
   render();
   try {
     await cal.deleteEvent(e);
-    toast(`Deleted ${e.title}`);
+    toast(e.taskId ? `Removed the time block for ${e.title}` : `Deleted ${e.title}`);
     writeSnapshot();
   } catch (err) {
     S.events.set(e.key, e);
@@ -756,6 +822,7 @@ function openEditor(e, draft) {
       render();
       toast(`${isNew ? "Added" : "Saved"} ${saved.title}`);
       writeSnapshot();
+      followBlock(saved);
     } catch (x) {
       btn.disabled = false;
       if (x.status === 401) { googleError(x); return; }
@@ -787,15 +854,46 @@ function openTask(id) {
   const node = html(`<div>
     <div class="sh-head" style="--c:${spaceColour(t.spaceId)}"><span class="swatch" style="border-radius:50%"></span><h2></h2><button class="x-btn" data-close aria-label="Close">${I.x}</button></div>
     <div class="d-cal" style="--c:${spaceColour(t.spaceId)}"><i></i>${esc(T.spaceLabel(t.spaceId))} · ${esc(t.where.label)}</div>
-    <div class="f-group"><div class="f-line"><label>Date</label><input type="date" name="date"></div></div>
+    <div class="f-group">
+      <div class="f-line"><label>Date</label><input type="date" name="date"></div>
+      <div class="f-line"><label>Time</label><input type="time" name="time" step="900"><select name="len" aria-label="How long"></select><button type="button" class="btn" data-act="block" disabled>Block</button></div>
+    </div>
+    <p class="f-note" style="margin:6px 2px 0">A time blocks it out on your main calendar.</p>
     ${late ? `<p class="f-note late" style="margin-top:8px">Overdue: it was due ${esc(D.relative(t.date))}.</p>` : ""}
     ${tk.isLocked(t) ? `<p class="f-note" style="margin-top:8px">${esc(T.lockedHelp(t))}</p>` : ""}
     <div class="sh-foot"><a class="btn" href="${T.TASKS_APP}">Open tasks.</a><span class="spacer"></span><button class="btn primary" data-act="tick">Tick off</button></div>
   </div>`);
   node.querySelector("h2").textContent = t.text;
   const date = node.querySelector("input[type=date]");
-  date.value = t.date || "";
-  date.onchange = () => { if (date.value) { closeSheet(); moveTask(t, date.value); } };
+  const time = node.querySelector("input[type=time]");
+  const len = node.querySelector("select[name=len]");
+  const block = blockOf(t);
+  const minutes = blockMinutes(t);
+  for (const m of [...new Set([15, 30, 45, 60, 90, 120, 180, minutes])].sort((a, b) => a - b)) {
+    len.append(new Option(dur(m * 60000), m, false, m === minutes));
+  }
+  date.value = block?.startDay || t.date || "";
+  time.value = block ? D.hhmm(block.start) : "";
+  // With a block, a new date takes the block along at the same time.
+  date.onchange = () => {
+    if (!date.value) return;
+    closeSheet();
+    if (block) moveEvent(block, { date: date.value, minute: D.minutesInto(block.startDay, block.start) });
+    else moveTask(t, date.value);
+  };
+  // Saved with the button rather than on change, which some browsers fire
+  // after the hour is typed and before the minutes.
+  const blockBtn = node.querySelector("[data-act=block]");
+  const ready = () => { blockBtn.disabled = !time.value; blockBtn.classList.toggle("primary", Boolean(time.value)); };
+  time.oninput = ready;
+  time.onchange = ready;
+  ready();
+  blockBtn.onclick = () => {
+    if (!time.value) return;
+    const [h, m] = time.value.split(":").map(Number);
+    closeSheet();
+    timeBlock(t, date.value || t.date || D.today(), h * 60 + m, Number(len.value));
+  };
   node.querySelector("[data-act=tick]").onclick = () => { closeSheet(); tick(t); };
   openSheet("task", node);
 }
@@ -925,15 +1023,16 @@ async function tick(t, el) {
   }
 }
 
-async function moveTask(t, date) {
-  if (tk.isLocked(t)) { toast(T.lockedHelp(t), "err"); return; }
+// `quiet` when a time block has already said where it went.
+async function moveTask(t, date, { quiet = false } = {}) {
+  if (tk.isLocked(t)) { if (!quiet) toast(T.lockedHelp(t), "err"); return; }
   if (t.date === date) return;
   const was = t.date;
   t.date = date;
   render();
   try {
     await tk.rescheduleTask(t, date);
-    toast(`${t.text} → ${D.relative(date)}`);
+    if (!quiet) toast(`${t.text} → ${D.relative(date)}`);
     writeSnapshot();
   } catch (err) {
     console.error("Rescheduling failed:", err);
@@ -944,14 +1043,15 @@ async function moveTask(t, date) {
 }
 
 // Dropped on a timeline, an event starts at that minute (an all-day event
-// becomes an hour long). Dropped on a day, it keeps its time.
-async function moveEvent(e, target) {
+// becomes an hour long). Dropped on a day, it keeps its time. `minutes`
+// sets a new length.
+async function moveEvent(e, target, minutes) {
   let start;
   let end;
   let allDay = e.allDay;
   if (target.minute != null) {
     start = D.atMinutes(target.date, target.minute);
-    end = new Date(start.getTime() + (e.allDay ? 3600000 : e.end - e.start));
+    end = new Date(start.getTime() + (minutes ? minutes * 60000 : e.allDay ? 3600000 : e.end - e.start));
     allDay = false;
   } else if (e.allDay) {
     start = D.parse(target.date);
@@ -961,7 +1061,7 @@ async function moveEvent(e, target) {
     start.setDate(start.getDate() + D.diffDays(e.startDay, target.date));
     end = new Date(start.getTime() + (e.end - e.start));
   }
-  if (start.getTime() === e.start.getTime() && allDay === e.allDay) return;
+  if (start.getTime() === e.start.getTime() && end.getTime() === e.end.getTime() && allDay === e.allDay) return;
   const moved = {
     ...e, start, end, allDay,
     startDay: D.iso(start),
@@ -976,10 +1076,92 @@ async function moveEvent(e, target) {
     render();
     toast(`${e.title} → ${D.relative(D.iso(start))}${allDay ? "" : ` ${D.time(start)}`}`);
     writeSnapshot();
+    followBlock(saved);
   } catch (err) {
     S.events.set(e.key, e);
     render();
     googleError(err, "Couldn’t move it");
+  }
+}
+
+// A task's date follows its time block to another day.
+function followBlock(e) {
+  const t = e.taskId && !e.taskDone ? findTask(e.taskId) : null;
+  if (t && t.date !== e.startDay) moveTask(t, e.startDay, { quiet: true });
+}
+
+// A task given a time: its block moves there, or a new one is made on the
+// main calendar. The task's date follows.
+async function timeBlock(t, date, minute, minutes = blockMinutes(t)) {
+  const block = blockOf(t);
+  if (block) { await moveEvent(block, { date, minute }, minutes); return; }
+  if (!googleReady()) { toast("Connect Google Calendar to give a task a time.", "err", { label: "Settings", run: openSettings }); return; }
+  const c = blockCalendar();
+  if (!c) { toast("None of your calendars can be added to.", "err"); return; }
+  const start = D.atMinutes(date, minute);
+  const end = new Date(start.getTime() + minutes * 60000);
+  const was = t.date;
+  // Undo puts the date back too, where there was one: neither Craft nor
+  // Todoist can clear a date.
+  const undo = () => { removeBlock(saved); if (was) moveTask(t, was, { quiet: true }); };
+  let saved;
+  setBusy(true);
+  try {
+    saved = await cal.createEvent(c, { title: t.text, allDay: false, start, end, task: t });
+    S.events.set(saved.key, saved);
+    render();
+    toast(`${t.text} → ${D.relative(date)} ${D.time(start)}`, "ok", { label: "Undo", run: undo });
+    writeSnapshot();
+    followBlock(saved);
+  } catch (err) {
+    googleError(err, "Couldn’t block out the time");
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function removeBlock(e) {
+  S.events.delete(e.key);
+  render();
+  try {
+    await cal.deleteEvent(e);
+    writeSnapshot();
+  } catch (err) {
+    S.events.set(e.key, e);
+    render();
+    googleError(err, "Couldn’t remove the block");
+  }
+}
+
+// Ticking a block ticks off its task, and marks the block done so it stays
+// on the calendar as a record of the time.
+async function tickBlock(e) {
+  if (blockDone(e)) return;
+  const t = findTask(e.taskId);
+  if (t && tk.isLocked(t)) { toast(T.lockedHelp(t), "err"); return; }
+  S.events.set(e.key, { ...e, taskDone: true });
+  render();
+  if (t) {
+    try {
+      await tk.completeTask(t);
+    } catch (err) {
+      console.error("Ticking off failed:", err);
+      S.events.set(e.key, e);
+      render();
+      toast(taskError(err, t), "err");
+      return;
+    }
+    S.tasks = S.tasks.filter(x => x.id !== t.id);
+    render();
+    writeSnapshot();
+  }
+  try {
+    const saved = await cal.updateEvent(e, { taskDone: true }, calendarOf(e.calendarId));
+    S.events.delete(e.key);
+    S.events.set(saved.key, saved);
+    render();
+  } catch (err) {
+    googleError(err, "Ticked off, but the block couldn’t be marked done");
   }
 }
 
@@ -1256,8 +1438,9 @@ async function reloadEvents() {
 async function loadTasks() {
   setBusy(true);
   try {
-    const { tasks, failed } = await tk.loadTasks();
+    const { tasks, failed, loaded } = await tk.loadTasks();
     S.tasks = tasks;
+    S.taskSpacesOk = new Set(loaded || []);
     S.tasksLoaded = true;
     if (failed.length) toast(`Couldn’t load tasks from ${failed.join(" and ")}`, "err");
   } catch (err) {
@@ -1456,7 +1639,7 @@ initDrag({
       if (!t) return false;
       if (tk.isLocked(t)) { toast(T.lockedHelp(t), "err"); return false; }
       if (el.closest("#sheet")) $("sheet-layer").classList.add("away");
-      return { label: t.text, color: spaceColour(t.spaceId), minutes: 60 };
+      return { label: t.text, color: spaceColour(t.spaceId), minutes: blockMinutes(t) };
     }
     const e = S.events.get(id);
     if (!e) return false;
@@ -1467,11 +1650,16 @@ initDrag({
       const r = col.getBoundingClientRect();
       grab = ((y - r.top) / r.height) * 1440 - D.minutesInto(col.dataset.dropDate, e.start);
     }
-    return { label: e.title, color: e.color, grab, minutes: e.allDay ? 60 : (e.end - e.start) / 60000 };
+    return { label: e.title, color: colourOf(e), grab, minutes: e.allDay ? 60 : (e.end - e.start) / 60000 };
   },
   describe: (t) => `${D.relative(t.date)}${t.minute != null ? ` · ${String(Math.floor(t.minute / 60)).padStart(2, "0")}:${String(t.minute % 60).padStart(2, "0")}` : ""}`,
   drop({ kind, id }, target) {
-    if (kind === "task") { const t = findTask(id); if (t) moveTask(t, target.date); }
+    // A task dropped on a time gets a time block; on a day, just the date.
+    if (kind === "task") {
+      const t = findTask(id);
+      if (t && target.minute != null) timeBlock(t, target.date, target.minute);
+      else if (t) moveTask(t, target.date);
+    }
     else { const e = S.events.get(id); if (e) moveEvent(e, target); }
   },
   end({ dropped }) {

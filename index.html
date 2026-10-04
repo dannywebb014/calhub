@@ -269,6 +269,10 @@
     .a-row.task .bar { background:transparent; }
     .a-row.task .title { font-weight:500; }
     .a-row.done .title { text-decoration:line-through; color:var(--dim); }
+    /* A task's time block: its time, the list's colour, then a tick. */
+    .a-row.block { grid-template-columns:52px 4px 22px minmax(0,1fr); }
+    .a-row.block .tick-cell { display:flex; align-items:flex-start; }
+    .a-row.block .title { font-weight:500; }
     .late { color:var(--danger); font-weight:600; }
     .sp { font-weight:700; color:var(--c); }
     .a-now { display:flex; align-items:center; gap:8px; padding:0 12px 0 10px; height:0; position:relative; z-index:1; }
@@ -335,6 +339,11 @@
     .ev small { color:var(--muted); font-size:11px; }
     .ev.short { padding-top:1px; } .ev.short b { display:inline; } .ev.short small { margin-left:4px; }
     .ev.past { opacity:.6; }
+    .ev.block { padding-left:23px; }
+    .ev.block .tick { position:absolute; left:5px; top:3px; width:14px; height:14px; border-width:1.5px; }
+    .ev.block.done b { text-decoration:line-through; color:var(--muted); }
+    .narrow .ev.block { padding-left:3px; }
+    .narrow .ev.block .tick { display:none; }
     .now-line { position:absolute; left:0; right:0; height:2px; background:var(--danger); z-index:3; pointer-events:none; }
     .now-line::before { content:""; position:absolute; left:-5px; top:-4px; width:10px; height:10px; border-radius:50%; background:var(--danger); }
     .drop-ghost-slot { position:absolute; left:2px; right:2px; border-radius:6px; border:2px dashed var(--accent); background:var(--accent-soft); pointer-events:none; z-index:4; }
@@ -591,6 +600,7 @@
       .side .a-head .tag { font-size:10px; }
       .side .a-empty { font-size:11px; }
       .side .a-row, .side .a-row.task { grid-template-columns:40px 3px minmax(0,1fr); gap:8px; padding:6px 10px 6px 8px; }
+      .side .a-row.block { grid-template-columns:40px 3px 16px minmax(0,1fr); }
       .side .a-row .when { font-size:11px; }
       .side .a-row .when.allday { font-size:10px; }
       .side .a-row .title { font-size:12px; }
