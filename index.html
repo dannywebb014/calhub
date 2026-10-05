@@ -185,6 +185,10 @@
       #today-btn .t-num { display:inline; }
     }
     @media (max-width: 374px) { .title-btn { font-size:21px; } }
+    /* Room for a long month ("September") beside the buttons on a small phone.
+       Below 380px the tasks. link goes; each task's sheet still links there. */
+    @media (max-width: 399px) { .acts { gap:4px; } .icon-btn, #today-btn { width:34px; height:34px; } }
+    @media (max-width: 379px) { #tasks-link { display:none; } }
 
     /* ── View switcher ── */
     #views { display:flex; margin:2px 16px 8px; padding:3px; border-radius:11px; background:var(--input); gap:2px; }
@@ -309,6 +313,8 @@
       -webkit-user-select:none; user-select:none; -webkit-touch-callout:none;
     }
     .chip span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    /* A repeating task's icon, after its name. */
+    .rep { display:inline-flex; flex-shrink:0; color:var(--dim); font-style:normal; vertical-align:-1px; }
     .chip.cont-l { border-top-left-radius:0; border-bottom-left-radius:0; }
     .chip.cont-r { border-top-right-radius:0; border-bottom-right-radius:0; }
     .chip.task { background:var(--card); border:1px solid var(--line); font-weight:500; }
@@ -644,6 +650,9 @@
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
             <span class="badge" id="inbox-badge" hidden></span>
           </button>
+          <a class="icon-btn" id="tasks-link" href="../taskhub/" data-hub="tasks" aria-label="Open tasks." title="Open tasks.">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 8 8 4"/><polyline points="3 16 5 18 8 14"/><line x1="12" y1="6" x2="21" y2="6"/><line x1="12" y1="16" x2="21" y2="16"/></svg>
+          </a>
           <button class="icon-btn" id="settings-btn" aria-label="Settings">
             <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
@@ -684,6 +693,6 @@
 
   <!-- The version is bumped on each release so a phone holding the page in
        its cache still fetches the new code. -->
-  <script type="module" src="app.js?v=10"></script>
+  <script type="module" src="app.js?v=11"></script>
 </body>
 </html>

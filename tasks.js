@@ -80,6 +80,7 @@ export async function loadTasks() {
             id: item.id,
             text: (item.markdown || "").replace(/^\s*[-*]\s*\[[ x]\]\s*/, "").trim() || "(no text)",
             date: item.taskInfo?.scheduleDate?.slice(0, 10) || null,
+            recurring: Boolean(item.taskInfo?.repeat),
             spaceId: space.id,
             where: placeOf(item.location),
           });

@@ -96,12 +96,12 @@ let tasks = [
   { id: "t1", text: "Send Sam the invoice", date: D.today(), spaceId: "work", where: { label: "Inbox" } },
   { id: "t2", text: "Book MOT", date: D.addDays(D.today(), -2), spaceId: "my", where: { label: "Car" , inDoc: true } },
   { id: "t3", text: "Chase the quote", date: D.addDays(D.today(), 1), spaceId: "work", where: { label: "Inbox" } },
-  { id: "t4", text: "Fix the gate", date: D.addDays(D.today(), 2), spaceId: "todoist", where: { label: "House" } },
+  { id: "t4", text: "Bins out", date: D.addDays(D.today(), 2), spaceId: "todoist", where: { label: "House" }, recurring: true },
   { id: "t5", text: "Renew passport", date: null, spaceId: "my", where: { label: "Inbox" } },
   { id: "t6", text: "Plan team offsite", date: null, spaceId: "work", where: { label: "Q4 plans", inDoc: true } },
   { id: "t7", text: "Buy birthday card for Mum", date: null, spaceId: "todoist", where: { label: "Joint Reminders" } },
   { id: "t8", text: "Call the council", date: D.addDays(D.today(), -1), spaceId: "todoist", where: { label: "House" } },
-  { id: "t9", text: "Water the plants", date: D.today(), spaceId: "my", where: { label: "Daily note" } },
+  { id: "t9", text: "Water the plants", date: D.today(), spaceId: "my", where: { label: "Daily note" }, recurring: true },
 ];
 
 export const taskSource = {

@@ -80,6 +80,7 @@ const I = {
   video: svg(`<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>`),
   people: svg(`<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>`),
   notes: svg(`<line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/>`),
+  repeatSmall: svg(`<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>`, 10, 2.4),
   repeat: svg(`<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>`, 12),
   x: svg(`<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`, 16, 2.4),
   grip: svg(`<circle cx="9" cy="6" r="1.2"/><circle cx="15" cy="6" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="18" r="1.2"/><circle cx="15" cy="18" r="1.2"/>`, 16, 2),
@@ -386,7 +387,7 @@ function blockRow(e, d) {
   if (e.editable) row.dataset.drag = `event:${e.key}`;
   const where = t ? `<span>${esc(t.where.label)}</span>` : "";
   row.innerHTML = `${eventWhen(e, d)}<div class="bar"></div><div class="tick-cell"><button class="tick" aria-label="Tick off">${I.check}</button></div>
-    <div class="body"><div class="title"></div><div class="sub">${e.taskSpace ? `<span class="sp">${esc(T.spaceLabel(e.taskSpace))}</span>` : ""}${where}</div></div>`;
+    <div class="body"><div class="title"></div><div class="sub">${e.taskSpace ? `<span class="sp">${esc(T.spaceLabel(e.taskSpace))}</span>` : ""}${where}${t?.recurring ? `<span title="Repeats">${I.repeat}</span>` : ""}</div></div>`;
   row.querySelector(".title").textContent = e.title;
   row.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tickBlock(e); };
   return row;
@@ -400,7 +401,7 @@ function taskRow(t) {
   row.dataset.drag = `task:${t.id}`;
   const late = t.date < D.today();
   row.innerHTML = `<div class="tick-cell"><button class="tick" aria-label="Tick off">${I.check}</button></div><div class="bar"></div>
-    <div class="body"><div class="title"></div><div class="sub"><span class="sp">${esc(T.spaceLabel(t.spaceId))}</span><span>${esc(t.where.label)}</span>${late ? `<span class="late">was due ${esc(D.relative(t.date))}</span>` : ""}</div></div>`;
+    <div class="body"><div class="title"></div><div class="sub"><span class="sp">${esc(T.spaceLabel(t.spaceId))}</span><span>${esc(t.where.label)}</span>${t.recurring ? `<span title="Repeats">${I.repeat}</span>` : ""}${late ? `<span class="late">was due ${esc(D.relative(t.date))}</span>` : ""}</div></div>`;
   row.querySelector(".title").textContent = t.text;
   row.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tick(t, row); };
   return row;
@@ -472,7 +473,7 @@ function renderTimeline(box, days, v) {
       b.style.cssText = `top:${(it.s / 1440) * 100}%;height:calc(${(mins / 1440) * 100}% - 2px);left:calc(${(it.col / it.cols) * 100}% + 2px);width:calc(${100 / it.cols}% - 4px);--c:${colourOf(e)}`;
       b.dataset.open = `event:${e.key}`;
       if (e.editable) b.dataset.drag = `event:${e.key}`;
-      b.innerHTML = `${e.taskId ? `<button class="tick" aria-label="Tick off">${I.checkSmall}</button>` : ""}<b></b><small>${D.time(e.start)}${mins >= 45 ? ` – ${D.time(e.end)}` : ""}</small>`;
+      b.innerHTML = `${e.taskId ? `<button class="tick" aria-label="Tick off">${I.checkSmall}</button>` : ""}<b></b><small>${D.time(e.start)}${mins >= 45 ? ` – ${D.time(e.end)}` : ""}${e.taskId && findTask(e.taskId)?.recurring ? ` <i class="rep" title="Repeats">${I.repeatSmall}</i>` : ""}</small>`;
       b.querySelector(".tick")?.addEventListener("click", (ev) => { ev.stopPropagation(); tickBlock(e); });
       b.querySelector("b").textContent = e.title;
       if (mins >= 75 && e.location) b.insertAdjacentHTML("beforeend", `<small style="display:block">${esc(e.location.split("\n")[0])}</small>`);
@@ -511,7 +512,7 @@ function blockChip(e) {
   chip.style.setProperty("--c", colourOf(e));
   chip.dataset.open = `event:${e.key}`;
   if (e.editable) chip.dataset.drag = `event:${e.key}`;
-  chip.innerHTML = `<button class="tick" aria-label="Tick off">${I.checkSmall}</button><span></span>`;
+  chip.innerHTML = `<button class="tick" aria-label="Tick off">${I.checkSmall}</button><span></span>${findTask(e.taskId)?.recurring ? `<i class="rep" title="Repeats">${I.repeatSmall}</i>` : ""}`;
   chip.querySelector("span").textContent = e.title;
   chip.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tickBlock(e); };
   return chip;
@@ -523,7 +524,7 @@ function taskChip(t) {
   chip.style.setProperty("--c", spaceColour(t.spaceId));
   chip.dataset.open = `task:${t.id}`;
   chip.dataset.drag = `task:${t.id}`;
-  chip.innerHTML = `<button class="tick" aria-label="Tick off">${I.checkSmall}</button><span></span>`;
+  chip.innerHTML = `<button class="tick" aria-label="Tick off">${I.checkSmall}</button><span></span>${t.recurring ? `<i class="rep" title="Repeats">${I.repeatSmall}</i>` : ""}`;
   chip.querySelector("span").textContent = t.text;
   chip.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tick(t, chip); };
   return chip;
@@ -598,7 +599,7 @@ function trayItems() {
     const item = html(`<div class="tray-item" data-drag="task:${esc(t.id)}" data-open="task:${esc(t.id)}" style="--c:${spaceColour(t.spaceId)}">
       <span class="grip">${I.grip}</span>
       <button class="tick" aria-label="Tick off">${I.check}</button>
-      <div class="body"><div class="title"></div><div class="sub"><span class="sp">${esc(T.spaceLabel(t.spaceId))}</span> · ${esc(t.where.label)}</div></div>
+      <div class="body"><div class="title"></div><div class="sub"><span class="sp">${esc(T.spaceLabel(t.spaceId))}</span> · ${esc(t.where.label)}${t.recurring ? ` · <span title="Repeats">${I.repeat}</span>` : ""}</div></div>
       <label class="date-pick" aria-label="Pick a date">${I.cal}<input type="date"></label></div>`);
     item.querySelector(".title").textContent = t.text;
     item.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tick(t, item); };
@@ -853,7 +854,7 @@ function openTask(id) {
   const late = t.date && t.date < D.today();
   const node = html(`<div>
     <div class="sh-head" style="--c:${spaceColour(t.spaceId)}"><span class="swatch" style="border-radius:50%"></span><h2></h2><button class="x-btn" data-close aria-label="Close">${I.x}</button></div>
-    <div class="d-cal" style="--c:${spaceColour(t.spaceId)}"><i></i>${esc(T.spaceLabel(t.spaceId))} · ${esc(t.where.label)}</div>
+    <div class="d-cal" style="--c:${spaceColour(t.spaceId)}"><i></i>${esc(T.spaceLabel(t.spaceId))} · ${esc(t.where.label)}${t.recurring ? ` · ${I.repeat} repeats` : ""}</div>
     <div class="f-group">
       <div class="f-line"><label>Date</label><input type="date" name="date"></div>
       <div class="f-line"><label>Time</label><input type="time" name="time" step="900"><select name="len" aria-label="How long"></select><button type="button" class="btn" data-act="block" disabled>Block</button></div>
@@ -1758,3 +1759,11 @@ async function start() {
   if (back?.ok) toast("Google Calendar connected");
 }
 start();
+
+// calendar. and tasks. link to each other. Inside the lifeOS picker the
+// picker switches tabs; opened on its own, the link is simply followed.
+document.querySelectorAll("a[data-hub]").forEach(a => a.addEventListener("click", (e) => {
+  try {
+    if (window.top !== window && window.top.lifeosOpen?.(a.dataset.hub)) e.preventDefault();
+  } catch { /* another site's frame: follow the link */ }
+}));
