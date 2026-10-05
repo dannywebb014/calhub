@@ -125,7 +125,7 @@ export async function completeTask(task) {
 // Craft and Todoist both take a plain YYYY-MM-DD. Neither offers a documented
 // way to clear a date, so this only ever sets one.
 export async function rescheduleTask(task, date) {
-  if (isTodoist(task.spaceId)) return todoist.rescheduleTask(task.id, date);
+  if (isTodoist(task.spaceId)) return todoist.rescheduleTask(task, date);
   return craft(task.spaceId, "/tasks", {
     method: "PUT",
     body: JSON.stringify({ tasksToUpdate: [{ id: task.id, taskInfo: { scheduleDate: date } }] }),
