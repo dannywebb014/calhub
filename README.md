@@ -53,4 +53,4 @@ After each load, the app writes `calendar.snapshot` to local storage: the next e
 - `android/`: the home-screen widget app
 - `parse.js`, `todoist.js`: copied from tasks. Keep them in step with it.
 
-A static site with no build step, hosted on GitHub Pages.
+A static site with no build step, hosted on GitHub Pages. GitHub Pages lets browsers keep each file for ten minutes, so the page and every module it loads carry one release number (`?v=N`). Run `./bump.sh` before each commit to raise it everywhere, and a reopened app fetches the new code straight away.

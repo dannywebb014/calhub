@@ -1,15 +1,15 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js";
-import * as google from "./google.js";
-import * as T from "./tasks.js";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js";
-import { initDrag, isDragging } from "./drag.js";
-import { parseTasks, SPACES } from "./parse.js";
-import * as speech from "./speech.js";
+import * as D from "./dates.js?v=14";
+import * as google from "./google.js?v=14";
+import * as T from "./tasks.js?v=14";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=14";
+import { initDrag, isDragging } from "./drag.js?v=14";
+import { parseTasks, SPACES } from "./parse.js?v=14";
+import * as speech from "./speech.js?v=14";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js") : null;
+const demo = DEMO ? await import("./demo.js?v=14") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
