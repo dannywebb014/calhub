@@ -1,15 +1,15 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=16";
-import * as google from "./google.js?v=16";
-import * as T from "./tasks.js?v=16";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=16";
-import { initDrag, isDragging } from "./drag.js?v=16";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=16";
-import * as speech from "/lifeos/shared/speech.js?v=16";
+import * as D from "./dates.js?v=17";
+import * as google from "./google.js?v=17";
+import * as T from "./tasks.js?v=17";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=17";
+import { initDrag, isDragging } from "./drag.js?v=17";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=17";
+import * as speech from "/lifeos/shared/speech.js?v=17";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=16") : null;
+const demo = DEMO ? await import("./demo.js?v=17") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -790,7 +790,21 @@ function openEditor(e, draft) {
 
   const times = () => node.querySelectorAll("input[type=time]").forEach(i => { i.hidden = f.allDay.checked; });
   times();
-  f.allDay.onchange = times;
+  // An all-day event's times are both midnight, so turning all-day off
+  // would leave a zero-length event that can't be saved. Give it 9–10am
+  // (or the next hour, today) on its first day instead.
+  f.allDay.onchange = () => {
+    times();
+    if (!f.allDay.checked && f.st.value === "00:00" && f.et.value === "00:00") {
+      const hour = f.sd.value === D.today() ? Math.min(23, new Date().getHours() + 1) : 9;
+      const start = D.atMinutes(f.sd.value, hour * 60);
+      const end = new Date(start.getTime() + 3600000);
+      f.st.value = D.hhmm(start);
+      f.ed.value = D.iso(end);
+      f.et.value = D.hhmm(end);
+      length = end - start;
+    }
+  };
 
   const read = () => {
     const allDay = f.allDay.checked;
