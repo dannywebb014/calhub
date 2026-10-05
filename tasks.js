@@ -6,8 +6,8 @@
 // its own, so they can be set up and tested here too; saving here writes the
 // same settings tasks. reads.
 
-import * as todoist from "/lifeos/shared/todoist.js?v=17";
-import { SPACES } from "/lifeos/shared/parse.js?v=17";
+import * as todoist from "/lifeos/shared/todoist.js?v=18";
+import { SPACES } from "/lifeos/shared/parse.js?v=18";
 
 export { SPACES };
 export const TASKS_APP = "../taskhub/";
@@ -107,6 +107,25 @@ let projects = [];
 // Every open task: dated ones for the calendar, undated ones for the inbox tray.
 // `loaded` lists the spaces that came back whole, so a task missing from one
 // of them is known to be done (or gone), not just unreachable.
+// Craft's dated lists and its inbox leave out a task in a document with no
+// date, so those come from the whole-space list ("all"), which also holds
+// done tasks and anything in the trash or a template; those are dropped.
+// A connection that can't see documents has no such list, which is fine.
+async function undatedDocTasks(spaceId) {
+  try {
+    const [all, trash, templates] = await Promise.all([
+      craft(spaceId, "/tasks?scope=all"),
+      craft(spaceId, "/documents?location=trash"),
+      craft(spaceId, "/documents?location=templates"),
+    ]);
+    const skip = new Set([...(trash.items || []), ...(templates.items || [])].map(d => d.id));
+    return (all.items || []).filter(i => i.taskInfo?.state === "todo" && i.location?.type === "document" && !skip.has(i.location.documentId));
+  } catch (err) {
+    if (err.status !== 404) console.error(`Loading undated ${spaceLabel(spaceId)} tasks failed:`, err);
+    return [];
+  }
+}
+
 export async function loadTasks() {
   todoist.setToken(settings().todoist?.token);
   const found = new Map();
@@ -119,8 +138,11 @@ export async function loadTasks() {
     try {
       // Craft counts a task scheduled for later today as upcoming, so all
       // three scopes are needed to see everything.
-      const lists = await Promise.all(["active", "upcoming", "inbox"].map(scope => craft(space.id, `/tasks?scope=${scope}`)));
-      for (const list of lists) {
+      const [lists, undated] = await Promise.all([
+        Promise.all(["active", "upcoming", "inbox"].map(scope => craft(space.id, `/tasks?scope=${scope}`))),
+        undatedDocTasks(space.id),
+      ]);
+      for (const list of [...lists, { items: undated }]) {
         for (const item of list.items || []) {
           if (item.taskInfo?.state !== "todo") continue;
           found.set(item.id, {
