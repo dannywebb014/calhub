@@ -1,11 +1,13 @@
 // ─── Tasks from Craft and Todoist ────────────────────────────────────
 //
-// The connections are the ones tasks. saves. Both apps live on the same site,
-// so they share this browser's storage and nothing has to be pasted twice.
-// Setting them up (and testing them) stays in tasks.
+// The connections are the ones tasks. saves, under "tasks.settings". Both apps
+// live on the same site, so in a browser (and inside lifeOS) they share it and
+// nothing has to be pasted twice. A home-screen app on iPhone has storage of
+// its own, so they can be set up and tested here too; saving here writes the
+// same settings tasks. reads.
 
-import * as todoist from "/lifeos/shared/todoist.js?v=15";
-import { SPACES } from "/lifeos/shared/parse.js?v=15";
+import * as todoist from "/lifeos/shared/todoist.js?v=16";
+import { SPACES } from "/lifeos/shared/parse.js?v=16";
 
 export { SPACES };
 export const TASKS_APP = "../taskhub/";
@@ -20,6 +22,51 @@ export const isConfigured = (id) => {
   return isTodoist(id) ? Boolean(s.todoist?.token) : Boolean(s.spaces?.[id]?.url);
 };
 export const defaultSpace = () => settings().defaultSpace || SPACES[0].id;
+
+// { url, key } for a Craft space, { token } for Todoist.
+export const connection = (id) => (isTodoist(id) ? settings().todoist : settings().spaces?.[id]) || {};
+
+// Saved the way tasks. saves them, keeping everything else it stores. The Craft
+// space ID tasks. remembers is kept only while the URL is unchanged.
+export function saveConnection(id, value) {
+  const s = settings();
+  if (isTodoist(id)) {
+    s.todoist = { token: String(value.token || "").trim() };
+    todoist.setToken(s.todoist.token);
+  } else {
+    const prev = s.spaces?.[id] || {};
+    const next = { url: String(value.url || "").trim(), key: String(value.key || "").trim() };
+    if (prev.spaceUuid && prev.url === next.url) next.spaceUuid = prev.spaceUuid;
+    s.spaces = { ...(s.spaces || {}), [id]: next };
+  }
+  try { localStorage.setItem("tasks.settings", JSON.stringify(s)); } catch { /* private mode */ }
+}
+
+// { ok, message } for the settings sheet. Craft has three kinds of connection
+// and only two can manage tasks; a "Daily Notes and Tasks" one has no
+// /documents, and can only change tasks in the inbox and daily notes.
+export async function testConnection(id) {
+  if (isTodoist(id)) {
+    try {
+      const list = await todoist.loadProjects();
+      projects = list;
+      return { ok: true, message: `Connected · ${list.length} project${list.length === 1 ? "" : "s"}` };
+    } catch (err) {
+      return { ok: false, message: err instanceof TypeError ? "Couldn’t reach Todoist." : err.message };
+    }
+  }
+  try {
+    const list = await craft(id, "/tasks?scope=inbox");
+    const docs = await craft(id, "/documents?limit=1").then(() => true, (err) => err.status !== 404);
+    const n = (list.items || []).length;
+    return { ok: true, message: docs ? `Connected · ${n} in the inbox` : "Connected, but only tasks in the inbox and daily notes can be changed. An “All Documents” connection can change the rest." };
+  } catch (err) {
+    if (err instanceof TypeError) return { ok: false, message: "Couldn’t reach Craft. Check the URL." };
+    if (err.status === 401 || err.status === 403) return { ok: false, message: "Craft needs the API key for this connection, or the key is wrong." };
+    if (err.status === 404) return { ok: false, message: "Craft doesn’t recognise this URL, or it’s a “Selected Documents” connection, which can’t see tasks." };
+    return { ok: false, message: err.message };
+  }
+}
 export const spaceLabel = (id) => SPACES.find(s => s.id === id)?.label || id;
 
 // Only the link ID matters, so anything around it in a paste is ignored.

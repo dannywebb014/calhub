@@ -24,7 +24,7 @@ Google won't show its sign-in page inside a frame, so when calendar. runs inside
 
 Sign-in is a redirect to Google rather than a popup, since popups are unreliable in a home-screen app on iPhone. Google's token lasts an hour. After that the page goes back through Google with `prompt=none`, which returns straight away as long as you're still signed in to Google in that browser.
 
-**Tasks.** Uses the Craft and Todoist connections saved in [tasks.](../taskhub/). Both apps are on the same site, so they share this browser's storage and nothing is entered twice. Set them up and test them there.
+**Tasks.** Uses the Craft and Todoist connections saved in [tasks.](../taskhub/). Both apps are on the same site, so in a browser and inside lifeOS they share this storage and nothing is entered twice. A calendar. added to an iPhone home screen has storage of its own, so the connections can also be set up and tested under Settings → Task connections; that writes the same settings tasks. reads.
 
 Nothing secret is in this repo. The client ID, the Google token and the task connections live in the browser only.
 

@@ -1,15 +1,15 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=15";
-import * as google from "./google.js?v=15";
-import * as T from "./tasks.js?v=15";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=15";
-import { initDrag, isDragging } from "./drag.js?v=15";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=15";
-import * as speech from "/lifeos/shared/speech.js?v=15";
+import * as D from "./dates.js?v=16";
+import * as google from "./google.js?v=16";
+import * as T from "./tasks.js?v=16";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=16";
+import { initDrag, isDragging } from "./drag.js?v=16";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=16";
+import * as speech from "/lifeos/shared/speech.js?v=16";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=15") : null;
+const demo = DEMO ? await import("./demo.js?v=16") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -945,8 +945,9 @@ function openSettings() {
     <section class="set-sec" id="cal-sec"><h3>Calendars</h3><div class="f-group" id="cal-list"></div>
       <div class="f-group" style="margin-top:8px"><div class="f-line"><label>New events</label><select name="defaultCal"></select></div></div>
     </section>
-    <section class="set-sec"><h3>Task lists</h3><div class="f-group" id="space-list"></div>
-      <p class="f-note" style="margin:6px 2px 0">These use the connections saved in <a href="${T.TASKS_APP}">tasks.</a>, so set them up or change them there.</p>
+    <section class="set-sec"><h3>Task lists</h3><div class="f-group" id="space-list"></div></section>
+    <section class="set-sec"><h3>Task connections</h3><div id="conn-list"></div>
+      <p class="f-note" style="margin:6px 2px 0">The same connections <a href="${T.TASKS_APP}" data-hub="tasks">tasks.</a> uses: change them here or there. In Craft, open <b>Imagine</b> and create an “All Documents” API connection for each space. For Todoist: Settings → Integrations → Developer → API token.</p>
     </section>
     <section class="set-sec"><h3>Appearance</h3>
       <div class="f-group"><div class="f-line"><label>Theme</label><select name="theme">
@@ -1009,8 +1010,8 @@ function openSettings() {
   const spaces = node.querySelector("#space-list");
   for (const s of T.SPACES) {
     const ok = DEMO || T.isConfigured(s.id);
-    const line = html(`<div class="f-line cal-toggle" style="--c:${spaceColour(s.id)}"><span class="sw" style="border-radius:50%"></span><span class="nm">${esc(s.label)}</span>
-      ${ok ? "" : `<a href="${T.TASKS_APP}">Set up in tasks.</a>`}
+    const line = html(`<div class="f-line cal-toggle" data-space="${s.id}" style="--c:${spaceColour(s.id)}"><span class="sw" style="border-radius:50%"></span><span class="nm">${esc(s.label)}</span>
+      ${ok ? "" : `<span class="st">not set up</span>`}
       <div class="switch"${ok ? "" : " hidden"}><input type="checkbox" aria-label="Show"><span></span></div></div>`);
     const box = line.querySelector("input");
     box.checked = !settings.hiddenSpaces.includes(s.id);
@@ -1022,8 +1023,49 @@ function openSettings() {
     };
     spaces.append(line);
   }
+  node.querySelector("#conn-list").replaceChildren(...T.SPACES.map(connectionBox));
   node.querySelector("[data-act=refresh]").onclick = () => { closeSheet(); refreshAll(); };
   openSheet("settings", node);
+}
+
+// One list's connection: Craft's API URL and key, or Todoist's token, with a
+// test. A connection that tests well reloads the tasks straight away.
+function connectionBox(s) {
+  const todo = T.isTodoist(s.id);
+  const saved = T.connection(s.id);
+  const box = html(`<div class="f-group conn" style="--c:${spaceColour(s.id)}">
+    <div class="f-line cal-toggle"><span class="sw" style="border-radius:50%"></span><span class="nm">${esc(s.label)}</span><span class="st">${todo ? "Todoist" : "Craft"}</span></div>
+    ${todo
+      ? `<div class="f-line"><label>Token</label><input type="password" name="token" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Todoist API token"></div>`
+      : `<div class="f-line"><label>API URL</label><input type="url" name="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://connect.craft.do/links/…"></div>
+         <div class="f-line"><label>API key</label><input type="password" name="key" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Only if you turned one on"></div>`}
+    <div class="f-line"><span class="grow f-note conn-result" style="flex:1"></span><button type="button" class="btn">Test</button></div>
+  </div>`);
+  const field = (n) => box.querySelector(`[name=${n}]`);
+  if (todo) field("token").value = saved.token || "";
+  else { field("url").value = saved.url || ""; field("key").value = saved.key || ""; }
+  const store = () => T.saveConnection(s.id, todo ? { token: field("token").value } : { url: field("url").value, key: field("key").value });
+  box.querySelectorAll("input").forEach(i => { i.onchange = store; });
+  const result = box.querySelector(".conn-result");
+  result.textContent = T.isConfigured(s.id) ? "Saved" : "Not set up";
+  box.querySelector(".btn").onclick = async () => {
+    store();
+    if (DEMO) { result.textContent = "Demo mode: nothing is connected."; return; }
+    if (!T.isConfigured(s.id)) { result.textContent = todo ? "Paste the token first." : "Paste the API URL first."; result.style.color = "var(--danger)"; return; }
+    result.style.color = "";
+    result.textContent = "Checking…";
+    const { ok, message } = await T.testConnection(s.id);
+    result.textContent = message;
+    result.style.color = ok ? "var(--success, var(--accent-text))" : "var(--danger)";
+    if (!ok) return;
+    // Its show/hide switch above can be used straight away.
+    const line = document.querySelector(`#space-list [data-space="${s.id}"]`);
+    line?.querySelector(".st")?.remove();
+    const sw = line?.querySelector(".switch");
+    if (sw) sw.hidden = false;
+    loadTasks();
+  };
+  return box;
 }
 
 // ─── Changing things ─────────────────────────────────────────────────
