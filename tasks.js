@@ -4,8 +4,8 @@
 // so they share this browser's storage and nothing has to be pasted twice.
 // Setting them up (and testing them) stays in tasks.
 
-import * as todoist from "./todoist.js?v=14";
-import { SPACES } from "./parse.js?v=14";
+import * as todoist from "/lifeos/shared/todoist.js?v=15";
+import { SPACES } from "/lifeos/shared/parse.js?v=15";
 
 export { SPACES };
 export const TASKS_APP = "../taskhub/";
