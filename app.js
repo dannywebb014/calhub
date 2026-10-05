@@ -4,6 +4,8 @@ import * as google from "./google.js";
 import * as T from "./tasks.js";
 import { guessKind, parseEvent, parseTask } from "./quickadd.js";
 import { initDrag, isDragging } from "./drag.js";
+import { parseTasks, SPACES } from "./parse.js";
+import * as speech from "./speech.js";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
@@ -80,6 +82,7 @@ const I = {
   video: svg(`<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>`),
   people: svg(`<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>`),
   notes: svg(`<line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/>`),
+  mic: svg(`<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/>`, 18, 2.2),
   repeatSmall: svg(`<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>`, 10, 2.4),
   repeat: svg(`<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>`, 12),
   x: svg(`<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`, 16, 2.4),
@@ -627,7 +630,12 @@ function fillTraySheet() {
 }
 
 // ─── Sheets ──────────────────────────────────────────────────────────
+// A sheet that needs tidying when it goes (dictation stops listening).
+let onSheetClose = null;
+const sheetGone = () => { const f = onSheetClose; onSheetClose = null; f?.(); };
+
 function openSheet(kind, node) {
+  sheetGone();
   S.sheet = kind;
   if (node) $("sheet").replaceChildren(node);
   $("sheet-layer").hidden = false;
@@ -635,6 +643,7 @@ function openSheet(kind, node) {
   $("sheet").scrollTop = 0;
 }
 function closeSheet() {
+  sheetGone();
   S.sheet = null;
   $("sheet-layer").hidden = true;
   $("sheet-layer").classList.remove("away", "top");
@@ -862,7 +871,7 @@ function openTask(id) {
     <p class="f-note" style="margin:6px 2px 0">A time blocks it out on your main calendar.</p>
     ${late ? `<p class="f-note late" style="margin-top:8px">Overdue: it was due ${esc(D.relative(t.date))}.</p>` : ""}
     ${tk.isLocked(t) ? `<p class="f-note" style="margin-top:8px">${esc(T.lockedHelp(t))}</p>` : ""}
-    <div class="sh-foot"><a class="btn" href="${T.TASKS_APP}">Open tasks.</a>${blockOf(t) ? `<button class="btn" data-act="event">Event</button>` : ""}<span class="spacer"></span><button class="btn primary" data-act="tick">Tick off</button></div>
+    <div class="sh-foot"><a class="btn" href="${T.TASKS_APP}" data-hub="tasks">Open tasks.</a>${blockOf(t) ? `<button class="btn" data-act="event">Event</button>` : ""}<span class="spacer"></span><button class="btn primary" data-act="tick">Tick off</button></div>
   </div>`);
   node.querySelector("h2").textContent = t.text;
   const date = node.querySelector("input[type=date]");
@@ -1223,15 +1232,32 @@ async function addEntry(p) {
       toast(`Set up ${missing.map(T.spaceLabel).join(" and ")} in tasks. first.`, "err", { label: "Open", run: () => { location.href = T.TASKS_APP; } });
       return false;
     }
-    for (const t of p.tasks) await tk.addTask({ text: t.text, space: t.space, date: t.date });
-    toast(`Added ${p.tasks.length === 1 ? p.tasks[0].text : `${p.tasks.length} tasks`}`);
-    await loadTasks();
+    await addTasks(p.tasks);
     return true;
   } catch (err) {
     console.error("Quick add failed:", err);
     if (p.kind === "event") googleError(err, "Couldn’t add it");
     else toast(err instanceof TypeError ? "Couldn’t reach Craft or Todoist." : `Couldn’t add it: ${err.message}`, "err");
     return false;
+  }
+}
+
+// Tasks from quick add or dictation, one at a time. Any with a time are then
+// blocked out at it, as dropping them on that time would.
+async function addTasks(list) {
+  const timed = [];
+  for (const t of list) {
+    const made = await tk.addTask({ text: t.text, space: t.space, date: t.date });
+    if (t.time && t.date) timed.push({ ...t, id: made?.id || null, text: made?.text || t.text });
+  }
+  if (!timed.length) toast(`Added ${list.length === 1 ? list[0].text : `${list.length} tasks`}`);
+  await loadTasks();
+  for (const x of timed) {
+    // Craft may not hand back the new ID, so the task is then found by its text.
+    const task = (x.id && findTask(x.id)) || S.tasks.find(s => s.spaceId === x.space && s.text === x.text && !blockOf(s));
+    if (!task) { toast(`Added ${x.text}, but couldn’t find it again to block out ${x.time}.`, "err"); continue; }
+    const [h, m] = x.time.split(":").map(Number);
+    await timeBlock(task, x.date, h * 60 + m, x.minutes || 60);
   }
 }
 
@@ -1371,6 +1397,104 @@ function openAdd(text = "") {
   reparse();
   input.focus();
 }
+
+// ─── Dictating tasks ─────────────────────────────────────────────────
+// tasks.' dictation, in a sheet: speak or type, one task per sentence, with
+// "work" / "my space" / "joint" switching space and a date and time going
+// with each. Each task can be tidied before it goes. A time blocks it out.
+function openDictate({ listen = false } = {}) {
+  let tasks = [];
+  let timer;
+  const node = html(`<form class="dictate" novalidate autocomplete="off">
+    <div class="sh-head"><h2>dictate<span class="dot-accent">.</span></h2><button type="button" class="x-btn" data-close aria-label="Close">${I.x}</button></div>
+    <textarea class="dict-input" name="text" rows="4" autocapitalize="sentences" placeholder="Speak or type your tasks" aria-label="Tasks"></textarea>
+    <div class="dict-mic"><button type="button" class="dict-btn" data-act="mic" hidden>${I.mic}<span>Start speaking</span></button><span class="dict-said"></span></div>
+    <p class="f-note">One task per sentence. Start with “work”, “my space” or “joint” to switch list. A date and time go with the task: “call Sam tomorrow at 3pm”.</p>
+    <div class="dict-list"></div>
+    <div class="sh-foot"><a class="btn" href="${T.TASKS_APP}" data-hub="tasks">Open tasks.</a><span class="spacer"></span><button class="btn primary" data-act="add" disabled>Add</button></div>
+  </form>`);
+  const input = node.elements.text;
+  const list = node.querySelector(".dict-list");
+  const addBtn = node.querySelector("[data-act=add]");
+  const micBtn = node.querySelector("[data-act=mic]");
+  const said = node.querySelector(".dict-said");
+
+  const reparse = () => { tasks = parseTasks(input.value, chrono, { defaultSpace: T.defaultSpace() }); paint(); };
+  const paintAdd = () => {
+    addBtn.disabled = !tasks.length || tasks.some(t => !t.text.trim());
+    addBtn.textContent = tasks.length > 1 ? `Add ${tasks.length} tasks` : "Add";
+  };
+
+  function paint() {
+    paintAdd();
+    list.replaceChildren(...tasks.map((t, i) => {
+      const el = html(`<div class="dict-task" style="--c:${spaceColour(t.space)}">
+        <span class="ring"></span>
+        <div class="dt-body">
+          <input class="dt-text" aria-label="Task" enterkeyhint="done">
+          <div class="dt-meta">
+            <button type="button" class="dt-chip sp" data-act="space" aria-label="List, tap to switch"></button>
+            <label class="dt-chip${t.date ? " set" : ""}">${I.cal}<span>${esc(t.date ? D.relative(t.date) : "No date")}</span><input type="date" aria-label="Date"></label>
+            <label class="dt-chip${t.time ? " set" : ""}">${I.clock}<span>${esc(t.time ? `${t.time}${t.minutes && t.minutes !== 60 ? ` · ${dur(t.minutes * 60000)}` : ""}` : "Add time")}</span><input type="time" step="900" aria-label="Time to block out"></label>
+          </div>
+        </div>
+        <button type="button" class="x-btn" data-act="remove" aria-label="Remove task">${I.x}</button>
+      </div>`);
+      const text = el.querySelector(".dt-text");
+      text.value = t.text;
+      text.oninput = () => { t.text = text.value; paintAdd(); };
+      el.querySelector("[data-act=space]").textContent = T.spaceLabel(t.space);
+      el.querySelector("[data-act=space]").onclick = () => {
+        t.space = SPACES[(SPACES.findIndex(s => s.id === t.space) + 1) % SPACES.length].id;
+        paint();
+      };
+      const date = el.querySelector("input[type=date]");
+      date.value = t.date || "";
+      date.onchange = () => { t.date = date.value || null; if (!t.date) t.time = null; paint(); };
+      const time = el.querySelector("input[type=time]");
+      time.value = t.time || "";
+      // A time needs a day, so it brings today along when there isn't one.
+      time.onchange = () => { t.time = time.value || null; if (t.time && !t.date) t.date = D.today(); paint(); };
+      el.querySelector("[data-act=remove]").onclick = () => { tasks.splice(i, 1); paint(); };
+      return el;
+    }));
+  }
+
+  const mic = speech.listener(input, {
+    onChange: reparse,
+    onInterim: (s) => { said.textContent = s; },
+    onState: (on) => {
+      micBtn.classList.toggle("on", on);
+      micBtn.querySelector("span").textContent = on ? "Stop" : "Start speaking";
+    },
+    onError: (msg) => toast(msg, "err"),
+  });
+  if (speech.supported) {
+    micBtn.hidden = false;
+    micBtn.onclick = () => (mic.listening ? mic.stop() : mic.start());
+  }
+
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(reparse, 250); });
+  node.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearTimeout(timer);
+    if (addBtn.disabled) return;
+    mic.stop();
+    addBtn.disabled = true;
+    addBtn.textContent = "Adding…";
+    if (await addEntry({ kind: "task", tasks: tasks.map(t => ({ ...t, text: t.text.trim() })) })) closeSheet();
+    else paintAdd();
+  });
+
+  openSheet("dictate", node);
+  onSheetClose = () => { clearTimeout(timer); mic.stop(); };
+  paint();
+  // Started from the tap itself, which iOS needs before it will listen.
+  if (listen && speech.supported) mic.start();
+  else input.focus();
+}
+
+$("qa-mic").addEventListener("click", () => openDictate({ listen: true }));
 
 qa.addEventListener("input", reparseQuick);
 $("qa-form").addEventListener("submit", (e) => { e.preventDefault(); submitQuick(); });
@@ -1644,7 +1768,7 @@ document.addEventListener("keydown", (e) => {
   const keys = {
     ".": () => select(D.today()), t: toggleTasks, d: () => setView("day"), w: () => setView("week"), m: () => setView("month"),
     l: () => setView("agenda"), ArrowLeft: () => step(-1), ArrowRight: () => step(1),
-    n: () => openAdd(), "/": () => qa.focus(), s: toggleSide,
+    n: () => openAdd(), "/": () => qa.focus(), s: toggleSide, v: () => openDictate(),
   };
   if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
 });
@@ -1762,8 +1886,10 @@ start();
 
 // calendar. and tasks. link to each other. Inside the lifeOS picker the
 // picker switches tabs; opened on its own, the link is simply followed.
-document.querySelectorAll("a[data-hub]").forEach(a => a.addEventListener("click", (e) => {
+document.addEventListener("click", (e) => {
+  const a = e.target.closest("a[data-hub]");
+  if (!a) return;
   try {
     if (window.top !== window && window.top.lifeosOpen?.(a.dataset.hub)) e.preventDefault();
   } catch { /* another site's frame: follow the link */ }
-}));
+});

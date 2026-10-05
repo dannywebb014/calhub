@@ -134,18 +134,22 @@ export async function rescheduleTask(task, date) {
 }
 
 // New tasks go to the space's inbox, or for Todoist to the project named
-// first ("joint house fix the gate"), else the shared list.
+// first ("joint house fix the gate"), else the shared list. Returns the new
+// task's { id, text } where the API hands an ID back, so a time block can be
+// tied to it. Craft doesn't document its reply, so its ID may be missing.
 export async function addTask({ text, space, date }) {
   if (isTodoist(space)) {
     if (!projects.length) projects = await todoist.loadProjects();
     const { project, text: rest } = todoist.pickProject(text, projects);
-    await todoist.addTask({ text: rest, date, projectId: project?.id });
-    return;
+    const made = await todoist.addTask({ text: rest, date, projectId: project?.id });
+    return { id: made?.id ? String(made.id) : null, text: rest };
   }
-  await craft(space, "/tasks", {
+  const made = await craft(space, "/tasks", {
     method: "POST",
     body: JSON.stringify({
       tasks: [{ markdown: text, location: { type: "inbox" }, ...(date ? { taskInfo: { scheduleDate: date } } : {}) }],
     }),
   });
+  const items = made?.items || made?.tasks || (Array.isArray(made) ? made : []);
+  return { id: items.length === 1 && items[0]?.id ? String(items[0].id) : null, text };
 }

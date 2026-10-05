@@ -108,7 +108,11 @@ export const taskSource = {
   loadTasks: async () => ({ tasks: tasks.map(t => ({ ...t })), failed: [], loaded: ["my", "work", "todoist"] }),
   completeTask: async (task) => { tasks = tasks.filter(t => t.id !== task.id); },
   rescheduleTask: async (task, date) => { tasks.find(t => t.id === task.id).date = date; },
-  addTask: async ({ text, space, date }) => { tasks.push({ id: `t${Date.now()}`, text, date, spaceId: space, where: { label: "Inbox" } }); },
+  addTask: async ({ text, space, date }) => {
+    const id = `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
+    tasks.push({ id, text, date, spaceId: space, where: { label: "Inbox" } });
+    return { id, text };
+  },
   isLocked: () => false,
   isConfigured: () => true,
 };
