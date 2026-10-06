@@ -1,15 +1,15 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=18";
-import * as google from "./google.js?v=18";
-import * as T from "./tasks.js?v=18";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=18";
-import { initDrag, isDragging } from "./drag.js?v=18";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=18";
-import * as speech from "/lifeos/shared/speech.js?v=18";
+import * as D from "./dates.js?v=19";
+import * as google from "./google.js?v=19";
+import * as T from "./tasks.js?v=19";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=19";
+import { initDrag, isDragging } from "./drag.js?v=19";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=19";
+import * as speech from "/lifeos/shared/speech.js?v=19";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=18") : null;
+const demo = DEMO ? await import("./demo.js?v=19") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -589,10 +589,6 @@ function trayItems() {
     list.innerHTML = `<p class="tray-hint">Loading tasks…</p>`;
     return list;
   }
-  if (!DEMO && !T.SPACES.some(s => T.isConfigured(s.id))) {
-    list.innerHTML = `<p class="tray-hint">Connect Craft or Todoist in <a href="${T.TASKS_APP}">tasks.</a> and they’ll show up here.</p>`;
-    return list;
-  }
   if (!index.undated.length) {
     list.innerHTML = `<p class="tray-hint">Nothing unscheduled. Nice.</p>`;
     return list;
@@ -1023,7 +1019,8 @@ function openSettings() {
 
   const spaces = node.querySelector("#space-list");
   for (const s of T.SPACES) {
-    const ok = DEMO || T.isConfigured(s.id);
+    // Every space can hold tasks, in lifeOS when nothing else is connected.
+    const ok = true;
     const line = html(`<div class="f-line cal-toggle" data-space="${s.id}" style="--c:${spaceColour(s.id)}"><span class="sw" style="border-radius:50%"></span><span class="nm">${esc(s.label)}</span>
       ${ok ? "" : `<span class="st">not set up</span>`}
       <div class="switch"${ok ? "" : " hidden"}><input type="checkbox" aria-label="Show"><span></span></div></div>`);
@@ -1061,7 +1058,7 @@ function connectionBox(s) {
   const store = () => T.saveConnection(s.id, todo ? { token: field("token").value } : { url: field("url").value, key: field("key").value });
   box.querySelectorAll("input").forEach(i => { i.onchange = store; });
   const result = box.querySelector(".conn-result");
-  result.textContent = T.isConfigured(s.id) ? "Saved" : "Not set up";
+  result.textContent = T.isConfigured(s.id) ? "Saved" : "Not connected: kept in lifeOS";
   box.querySelector(".btn").onclick = async () => {
     store();
     if (DEMO) { result.textContent = "Demo mode: nothing is connected."; return; }
@@ -1282,11 +1279,6 @@ async function addEntry(p) {
       toast(`Added ${saved.title} · ${D.relative(saved.startDay)}`, "ok", { label: "Edit", run: () => openEditor(S.events.get(saved.key)) });
       writeSnapshot();
       return true;
-    }
-    const missing = [...new Set(p.tasks.map(t => t.space))].filter(s => !DEMO && !T.isConfigured(s));
-    if (missing.length) {
-      toast(`Set up ${missing.map(T.spaceLabel).join(" and ")} in tasks. first.`, "err", { label: "Open", run: () => { location.href = T.TASKS_APP; } });
-      return false;
     }
     await addTasks(p.tasks);
     return true;

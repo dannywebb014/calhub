@@ -1,4 +1,7 @@
-// ─── Tasks from Craft and Todoist ────────────────────────────────────
+// ─── Tasks from Craft, Todoist and lifeOS ────────────────────────────
+//
+// A space with no Craft or Todoist connection keeps its tasks in lifeOS
+// itself (lifeos/shared/hubtasks.js), and those always show.
 //
 // The connections are the ones tasks. saves, under "tasks.settings". Both apps
 // live on the same site, so in a browser (and inside lifeOS) they share it and
@@ -6,8 +9,9 @@
 // its own, so they can be set up and tested here too; saving here writes the
 // same settings tasks. reads.
 
-import * as todoist from "/lifeos/shared/todoist.js?v=18";
-import { SPACES } from "/lifeos/shared/parse.js?v=18";
+import * as todoist from "/lifeos/shared/todoist.js?v=19";
+import { SPACES } from "/lifeos/shared/parse.js?v=19";
+import * as hub from "/lifeos/shared/hubtasks.js?v=19";
 
 export { SPACES };
 export const TASKS_APP = "../taskhub/";
@@ -131,6 +135,7 @@ export async function loadTasks() {
   const found = new Map();
   const failed = [];
   const loaded = [];
+  let hubOk = false;
   const jobs = SPACES.filter(s => !isTodoist(s.id) && isConfigured(s.id)).map(async (space) => {
     craft(space.id, "/documents?limit=1")
       .then(() => { canEditDocs[space.id] = true; })
@@ -176,8 +181,17 @@ export async function loadTasks() {
       }
     })());
   }
+  jobs.push(hub.loadTasks().then(list => {
+    for (const t of list) found.set(t.id, t);
+    hubOk = true;
+  }, err => {
+    console.error("Loading lifeOS tasks failed:", err);
+    failed.push("lifeOS");
+  }));
   await Promise.all(jobs);
-  return { tasks: [...found.values()], failed, loaded };
+  // A space has loaded in full when lifeOS and its connection (if any) both did.
+  const whole = hubOk ? SPACES.map(s => s.id).filter(id => !isConfigured(id) || loaded.includes(id)) : [];
+  return { tasks: [...found.values()], failed, loaded: whole };
 }
 
 // Ticking off or moving a task in a document needs an "All Documents" connection.
@@ -186,6 +200,7 @@ export const lockedHelp = (task) =>
   `That task is inside a document, and the ${spaceLabel(task.spaceId)} connection can only change tasks in the inbox and daily notes. Create an “All Documents” connection in Craft and paste it into tasks.`;
 
 export async function completeTask(task) {
+  if (task.builtin) return hub.closeTask(task.id);
   if (isTodoist(task.spaceId)) return todoist.closeTask(task.id);
   return craft(task.spaceId, "/tasks", {
     method: "PUT",
@@ -196,6 +211,7 @@ export async function completeTask(task) {
 // Craft and Todoist both take a plain YYYY-MM-DD. Neither offers a documented
 // way to clear a date, so this only ever sets one.
 export async function rescheduleTask(task, date) {
+  if (task.builtin) return hub.rescheduleTask(task.id, date);
   if (isTodoist(task.spaceId)) return todoist.rescheduleTask(task, date);
   return craft(task.spaceId, "/tasks", {
     method: "PUT",
@@ -208,6 +224,10 @@ export async function rescheduleTask(task, date) {
 // task's { id, text } where the API hands an ID back, so a time block can be
 // tied to it. Craft doesn't document its reply, so its ID may be missing.
 export async function addTask({ text, space, date }) {
+  if (hub.sourceOf(settings(), space) === "lifeos") {
+    const [made] = await hub.addTasks([{ text, date, spaceId: space }]);
+    return { id: made?.id || null, text };
+  }
   if (isTodoist(space)) {
     if (!projects.length) projects = await todoist.loadProjects();
     const { project, text: rest } = todoist.pickProject(text, projects);
