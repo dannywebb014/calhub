@@ -1,15 +1,15 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=22";
-import * as google from "./google.js?v=22";
-import * as T from "./tasks.js?v=22";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=22";
-import { initDrag, isDragging } from "./drag.js?v=22";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=22";
-import * as speech from "/lifeos/shared/speech.js?v=22";
+import * as D from "./dates.js?v=23";
+import * as google from "./google.js?v=23";
+import * as T from "./tasks.js?v=23";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=23";
+import { initDrag, isDragging } from "./drag.js?v=23";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=23";
+import * as speech from "/lifeos/shared/speech.js?v=23";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=22") : null;
+const demo = DEMO ? await import("./demo.js?v=23") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -1119,7 +1119,13 @@ async function tick(t, el) {
   if (tk.isLocked(t)) { toast(T.lockedHelp(t), "err"); return; }
   el?.classList.add("done");
   try {
-    await tk.completeTask(t);
+    const res = await tk.completeTask(t);
+    // A repeating task kept in lifeOS moves to its next date and stays.
+    if (res?.next) {
+      setTimeout(() => { t.date = res.next; el?.classList.remove("done"); render(); writeSnapshot(); }, el ? 650 : 0);
+      toast(`${t.text} → next ${D.relative(res.next)}`, "ok");
+      return;
+    }
     // Leave it ticked for a moment so the change is seen, then drop it.
     setTimeout(() => { S.tasks = S.tasks.filter(x => x.id !== t.id); render(); writeSnapshot(); }, el ? 650 : 0);
   } catch (err) {
@@ -1248,8 +1254,9 @@ async function tickBlock(e) {
   S.events.set(e.key, { ...e, taskDone: true });
   render();
   if (t) {
+    let res;
     try {
-      await tk.completeTask(t);
+      res = await tk.completeTask(t);
     } catch (err) {
       console.error("Ticking off failed:", err);
       S.events.set(e.key, e);
@@ -1257,7 +1264,8 @@ async function tickBlock(e) {
       toast(taskError(err, t), "err");
       return;
     }
-    S.tasks = S.tasks.filter(x => x.id !== t.id);
+    if (res?.next) { t.date = res.next; toast(`${t.text} → next ${D.relative(res.next)}`, "ok"); }
+    else S.tasks = S.tasks.filter(x => x.id !== t.id);
     render();
     writeSnapshot();
   }
@@ -1324,7 +1332,7 @@ async function addEntry(p) {
 async function addTasks(list) {
   const timed = [];
   for (const t of list) {
-    const made = await tk.addTask({ text: t.text, space: t.space, date: t.date, priority: t.priority });
+    const made = await tk.addTask({ text: t.text, space: t.space, date: t.date, priority: t.priority, repeat: t.repeat });
     if (t.time && t.date) timed.push({ ...t, id: made?.id || null, text: made?.text || t.text });
   }
   if (!timed.length) toast(`Added ${list.length === 1 ? list[0].text : `${list.length} tasks`}`);

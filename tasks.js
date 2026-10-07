@@ -9,9 +9,9 @@
 // its own, so they can be set up and tested here too; saving here writes the
 // same settings tasks. reads.
 
-import * as todoist from "/lifeos/shared/todoist.js?v=22";
-import { SPACES } from "/lifeos/shared/parse.js?v=22";
-import * as hub from "/lifeos/shared/hubtasks.js?v=22";
+import * as todoist from "/lifeos/shared/todoist.js?v=23";
+import { SPACES } from "/lifeos/shared/parse.js?v=23";
+import * as hub from "/lifeos/shared/hubtasks.js?v=23";
 
 export { SPACES };
 export const TASKS_APP = "../taskhub/";
@@ -208,8 +208,10 @@ export const isLocked = (task) => !isTodoist(task.spaceId) && task.where.inDoc &
 export const lockedHelp = (task) =>
   `That task is inside a document, and the ${spaceLabel(task.spaceId)} connection can only change tasks in the inbox and daily notes. Create an “All Documents” connection in Craft and paste it into tasks.`;
 
+// Resolves { next } for a repeating task kept in lifeOS, which moves to its
+// next date instead of closing.
 export async function completeTask(task) {
-  if (task.builtin) return hub.closeTask(task.id);
+  if (task.builtin) return hub.completeTask(task);
   if (isTodoist(task.spaceId)) return todoist.closeTask(task.id);
   return craft(task.spaceId, "/tasks", {
     method: "PUT",
@@ -240,15 +242,15 @@ export async function setPriority(task, priority) {
   return hub.setCraftPriority(task.spaceId, task.id, priority);
 }
 
-export async function addTask({ text, space, date, priority = 0 }) {
+export async function addTask({ text, space, date, priority = 0, repeat = null }) {
   if (hub.sourceOf(settings(), space) === "lifeos") {
-    const [made] = await hub.addTasks([{ text, date, spaceId: space, priority }]);
+    const [made] = await hub.addTasks([{ text, date, spaceId: space, priority, repeat }]);
     return { id: made?.id || null, text };
   }
   if (isTodoist(space)) {
     if (!projects.length) projects = await todoist.loadProjects();
     const { project, text: rest } = todoist.pickProject(text, projects);
-    const made = await todoist.addTask({ text: rest, date, projectId: project?.id, priority });
+    const made = await todoist.addTask({ text: rest, date, projectId: project?.id, priority, repeatText: repeat?.text });
     return { id: made?.id ? String(made.id) : null, text: rest };
   }
   const made = await craft(space, "/tasks", {
