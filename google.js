@@ -10,7 +10,7 @@
 // The token is kept in this browser under "calendar.google", where lifeOS.
 // (same site) can also read it to show the next event.
 
-import * as D from "./dates.js?v=21";
+import * as D from "./dates.js?v=22";
 
 const AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const API = "https://www.googleapis.com/calendar/v3";

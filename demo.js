@@ -2,7 +2,7 @@
 // Made-up calendars, events and tasks, kept in memory, so the page can be
 // tried and tested without Google, Craft or Todoist. Nothing is saved.
 
-import * as D from "./dates.js?v=21";
+import * as D from "./dates.js?v=22";
 
 const CALS = [
   { id: "me", name: "Personal", color: "#4a8fd0", primary: true, writable: true, selected: true },
@@ -97,20 +97,21 @@ let tasks = [
   { id: "t2", text: "Book MOT", date: D.addDays(D.today(), -2), spaceId: "my", where: { label: "Car" , inDoc: true } },
   { id: "t3", text: "Chase the quote", date: D.addDays(D.today(), 1), spaceId: "work", where: { label: "Inbox" } },
   { id: "t4", text: "Bins out", date: D.addDays(D.today(), 2), spaceId: "todoist", where: { label: "House" }, recurring: true },
-  { id: "t5", text: "Renew passport", date: null, spaceId: "my", where: { label: "Inbox" } },
+  { id: "t5", priority: 2, text: "Renew passport", date: null, spaceId: "my", where: { label: "Inbox" } },
   { id: "t6", text: "Plan team offsite", date: null, spaceId: "work", where: { label: "Q4 plans", inDoc: true } },
   { id: "t7", text: "Buy birthday card for Mum", date: null, spaceId: "todoist", where: { label: "Joint Reminders" } },
-  { id: "t8", text: "Call the council", date: D.addDays(D.today(), -1), spaceId: "todoist", where: { label: "House" } },
-  { id: "t9", text: "Water the plants", date: D.today(), spaceId: "my", where: { label: "Daily note" }, recurring: true },
+  { id: "t8", priority: 3, text: "Call the council", date: D.addDays(D.today(), -1), spaceId: "todoist", where: { label: "House" } },
+  { id: "t9", priority: 1, text: "Water the plants", date: D.today(), spaceId: "my", where: { label: "Daily note" }, recurring: true },
 ];
 
 export const taskSource = {
   loadTasks: async () => ({ tasks: tasks.map(t => ({ ...t })), failed: [], loaded: ["my", "work", "todoist"] }),
   completeTask: async (task) => { tasks = tasks.filter(t => t.id !== task.id); },
   rescheduleTask: async (task, date) => { tasks.find(t => t.id === task.id).date = date; },
-  addTask: async ({ text, space, date }) => {
+  setPriority: async (task, priority) => { tasks.find(t => t.id === task.id).priority = priority; },
+  addTask: async ({ text, space, date, priority = 0 }) => {
     const id = `t${Date.now()}${Math.random().toString(36).slice(2, 6)}`;
-    tasks.push({ id, text, date, spaceId: space, where: { label: "Inbox" } });
+    tasks.push({ id, text, date, priority, spaceId: space, where: { label: "Inbox" } });
     return { id, text };
   },
   isLocked: () => false,

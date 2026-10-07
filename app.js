@@ -1,15 +1,15 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=21";
-import * as google from "./google.js?v=21";
-import * as T from "./tasks.js?v=21";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=21";
-import { initDrag, isDragging } from "./drag.js?v=21";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=21";
-import * as speech from "/lifeos/shared/speech.js?v=21";
+import * as D from "./dates.js?v=22";
+import * as google from "./google.js?v=22";
+import * as T from "./tasks.js?v=22";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=22";
+import { initDrag, isDragging } from "./drag.js?v=22";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=22";
+import * as speech from "/lifeos/shared/speech.js?v=22";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=21") : null;
+const demo = DEMO ? await import("./demo.js?v=22") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -169,6 +169,14 @@ const tasksOn = (d) => index.tasks.get(d) || [];
 // follows the block's day. Here a block is drawn as its task, with a tick,
 // in the task list's colour.
 const blockCalendar = () => writableCalendars().find(c => c.primary) || defaultCalendar();
+// The traffic light: 3 high (red), 2 medium (amber), 1 low (green), 0 none.
+const PRIORITY = ["None", "Low", "Medium", "High"];
+function light(el, t) {
+  const p = t?.priority || 0;
+  el.classList.toggle("prio", Boolean(p));
+  if (p) el.style.setProperty("--pc", `var(--p${p})`);
+  return el;
+}
 // Done when ticked off here, or when its task has gone from a list that loaded.
 const blockDone = (e) => e.taskDone || (S.tasksLoaded && !findTask(e.taskId) && S.taskSpacesOk.has(e.taskSpace));
 const colourOf = (e) => (e.taskId && e.taskSpace ? spaceColour(e.taskSpace) : e.color);
@@ -393,7 +401,7 @@ function blockRow(e, d) {
     <div class="body"><div class="title"></div><div class="sub">${e.taskSpace ? `<span class="sp">${esc(T.spaceLabel(e.taskSpace))}</span>` : ""}${where}${t?.recurring ? `<span title="Repeats">${I.repeat}</span>` : ""}</div></div>`;
   row.querySelector(".title").textContent = e.title;
   row.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tickBlock(e); };
-  return row;
+  return light(row, t);
 }
 
 function taskRow(t) {
@@ -407,7 +415,7 @@ function taskRow(t) {
     <div class="body"><div class="title"></div><div class="sub"><span class="sp">${esc(T.spaceLabel(t.spaceId))}</span><span>${esc(t.where.label)}</span>${t.recurring ? `<span title="Repeats">${I.repeat}</span>` : ""}${late ? `<span class="late">was due ${esc(D.relative(t.date))}</span>` : ""}</div></div>`;
   row.querySelector(".title").textContent = t.text;
   row.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tick(t, row); };
-  return row;
+  return light(row, t);
 }
 
 // ─── Day and week ────────────────────────────────────────────────────
@@ -478,6 +486,7 @@ function renderTimeline(box, days, v) {
       if (e.editable) b.dataset.drag = `event:${e.key}`;
       b.innerHTML = `${e.taskId ? `<button class="tick" aria-label="Tick off">${I.checkSmall}</button>` : ""}<b></b><small>${D.time(e.start)}${mins >= 45 ? ` – ${D.time(e.end)}` : ""}${e.taskId && findTask(e.taskId)?.recurring ? ` <i class="rep" title="Repeats">${I.repeatSmall}</i>` : ""}</small>`;
       b.querySelector(".tick")?.addEventListener("click", (ev) => { ev.stopPropagation(); tickBlock(e); });
+      if (e.taskId) light(b, findTask(e.taskId));
       b.querySelector("b").textContent = e.title;
       if (mins >= 75 && e.location) b.insertAdjacentHTML("beforeend", `<small style="display:block">${esc(e.location.split("\n")[0])}</small>`);
       col.append(b);
@@ -517,6 +526,7 @@ function blockChip(e) {
   if (e.editable) chip.dataset.drag = `event:${e.key}`;
   chip.innerHTML = `<button class="tick" aria-label="Tick off">${I.checkSmall}</button><span></span>${findTask(e.taskId)?.recurring ? `<i class="rep" title="Repeats">${I.repeatSmall}</i>` : ""}`;
   chip.querySelector("span").textContent = e.title;
+  light(chip, findTask(e.taskId));
   chip.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tickBlock(e); };
   return chip;
 }
@@ -601,6 +611,7 @@ function trayItems() {
       <div class="body"><div class="title"></div><div class="sub"><span class="sp">${esc(T.spaceLabel(t.spaceId))}</span> · ${esc(t.where.label)}${t.recurring ? ` · <span title="Repeats">${I.repeat}</span>` : ""}</div></div>
       <label class="date-pick" aria-label="Pick a date">${I.cal}<input type="date"></label></div>`);
     item.querySelector(".title").textContent = t.text;
+    light(item, t);
     item.querySelector(".tick").onclick = (ev) => { ev.stopPropagation(); tick(t, item); };
     item.querySelector("label").onclick = (ev) => ev.stopPropagation();
     const pick = item.querySelector("input");
@@ -875,6 +886,8 @@ function openTask(id) {
     <div class="sh-head" style="--c:${spaceColour(t.spaceId)}"><span class="swatch" style="border-radius:50%"></span><h2></h2><button class="x-btn" data-close aria-label="Close">${I.x}</button></div>
     <div class="d-cal" style="--c:${spaceColour(t.spaceId)}"><i></i>${esc(T.spaceLabel(t.spaceId))} · ${esc(t.where.label)}${t.recurring ? ` · ${I.repeat} repeats` : ""}</div>
     <div class="f-group">
+      <div class="f-line"><label>Priority</label><div class="prio-seg" role="group" aria-label="Priority">${[3, 2, 1, 0].map(p =>
+        `<button type="button" data-p="${p}" aria-pressed="${(t.priority || 0) === p}"${p ? ` style="--pc:var(--p${p})"` : ""}><i></i>${PRIORITY[p]}</button>`).join("")}</div></div>
       <div class="f-line"><label>Date</label><input type="date" name="date"></div>
       <div class="f-line"><label>Time</label><input type="time" name="time" step="900"><select name="len" aria-label="How long"></select><button type="button" class="btn" data-act="block" disabled>Block</button></div>
     </div>
@@ -929,6 +942,22 @@ function openTask(id) {
   };
   node.querySelector("[data-act=event]")?.addEventListener("click", () => { const b = blockOf(t); if (b) openEvent(b.key); });
   node.querySelector("[data-act=tick]").onclick = () => { closeSheet(); tick(t); };
+  // Saved straight away, like the date; the sheet stays open.
+  node.querySelectorAll(".prio-seg button").forEach(b => b.onclick = async () => {
+    const p = Number(b.dataset.p), was = t.priority || 0;
+    if (p === was || tk.isLocked(t)) { if (tk.isLocked(t)) toast(T.lockedHelp(t), "err"); return; }
+    const mark = (v) => node.querySelectorAll(".prio-seg button").forEach(x => x.setAttribute("aria-pressed", String(Number(x.dataset.p) === v)));
+    t.priority = p; mark(p); render();
+    try {
+      await tk.setPriority(t, p);
+      writeSnapshot();
+      toast(`${t.text} → ${p ? `${PRIORITY[p].toLowerCase()} priority` : "no priority"}`, "ok");
+    } catch (err) {
+      console.error("Changing the priority failed:", err);
+      t.priority = was; mark(was); render();
+      toast(`Couldn’t change the priority: ${err.message}`, "err");
+    }
+  });
   openSheet("task", node);
 }
 
@@ -1295,7 +1324,7 @@ async function addEntry(p) {
 async function addTasks(list) {
   const timed = [];
   for (const t of list) {
-    const made = await tk.addTask({ text: t.text, space: t.space, date: t.date });
+    const made = await tk.addTask({ text: t.text, space: t.space, date: t.date, priority: t.priority });
     if (t.time && t.date) timed.push({ ...t, id: made?.id || null, text: made?.text || t.text });
   }
   if (!timed.length) toast(`Added ${list.length === 1 ? list[0].text : `${list.length} tasks`}`);

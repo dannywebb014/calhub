@@ -9,9 +9,9 @@
 // its own, so they can be set up and tested here too; saving here writes the
 // same settings tasks. reads.
 
-import * as todoist from "/lifeos/shared/todoist.js?v=21";
-import { SPACES } from "/lifeos/shared/parse.js?v=21";
-import * as hub from "/lifeos/shared/hubtasks.js?v=21";
+import * as todoist from "/lifeos/shared/todoist.js?v=22";
+import { SPACES } from "/lifeos/shared/parse.js?v=22";
+import * as hub from "/lifeos/shared/hubtasks.js?v=22";
 
 export { SPACES };
 export const TASKS_APP = "../taskhub/";
@@ -136,6 +136,11 @@ export async function loadTasks() {
   const failed = [];
   const loaded = [];
   let hubOk = false;
+  // Craft has no priority, so lifeOS keeps a light for each Craft task given one.
+  let craftLights = new Map();
+  const lights = SPACES.some(s => !isTodoist(s.id) && isConfigured(s.id))
+    ? hub.loadCraftPriorities().then(m => { craftLights = m; }, err => console.error("Loading Craft priorities failed:", err))
+    : null;
   const jobs = SPACES.filter(s => !isTodoist(s.id) && isConfigured(s.id)).map(async (space) => {
     craft(space.id, "/documents?limit=1")
       .then(() => { canEditDocs[space.id] = true; })
@@ -156,6 +161,7 @@ export async function loadTasks() {
             date: item.taskInfo?.scheduleDate?.slice(0, 10) || null,
             // The task list puts repeat beside taskInfo, not in it as edits do.
             recurring: Boolean(item.repeat || item.taskInfo?.repeat),
+            priority: 0,
             spaceId: space.id,
             where: placeOf(item.location),
           });
@@ -188,7 +194,10 @@ export async function loadTasks() {
     console.error("Loading lifeOS tasks failed:", err);
     failed.push("lifeOS");
   }));
-  await Promise.all(jobs);
+  await Promise.all([...jobs, lights]);
+  for (const t of found.values()) {
+    if (!t.builtin && !isTodoist(t.spaceId)) t.priority = craftLights.get(hub.craftKey(t.spaceId, t.id)) || 0;
+  }
   // A space has loaded in full when lifeOS and its connection (if any) both did.
   const whole = hubOk ? SPACES.map(s => s.id).filter(id => !isConfigured(id) || loaded.includes(id)) : [];
   return { tasks: [...found.values()], failed, loaded: whole };
@@ -223,15 +232,23 @@ export async function rescheduleTask(task, date) {
 // first ("joint house fix the gate"), else the shared list. Returns the new
 // task's { id, text } where the API hands an ID back, so a time block can be
 // tied to it. Craft doesn't document its reply, so its ID may be missing.
-export async function addTask({ text, space, date }) {
+// The traffic light: 3 high, 2 medium, 1 low, 0 none. Todoist keeps its own
+// (p1–p3); a Craft task's is kept in lifeOS.
+export async function setPriority(task, priority) {
+  if (task.builtin) return hub.setPriority(task.id, priority);
+  if (isTodoist(task.spaceId)) return todoist.setPriority(task.id, priority);
+  return hub.setCraftPriority(task.spaceId, task.id, priority);
+}
+
+export async function addTask({ text, space, date, priority = 0 }) {
   if (hub.sourceOf(settings(), space) === "lifeos") {
-    const [made] = await hub.addTasks([{ text, date, spaceId: space }]);
+    const [made] = await hub.addTasks([{ text, date, spaceId: space, priority }]);
     return { id: made?.id || null, text };
   }
   if (isTodoist(space)) {
     if (!projects.length) projects = await todoist.loadProjects();
     const { project, text: rest } = todoist.pickProject(text, projects);
-    const made = await todoist.addTask({ text: rest, date, projectId: project?.id });
+    const made = await todoist.addTask({ text: rest, date, projectId: project?.id, priority });
     return { id: made?.id ? String(made.id) : null, text: rest };
   }
   const made = await craft(space, "/tasks", {
@@ -241,5 +258,7 @@ export async function addTask({ text, space, date }) {
     }),
   });
   const items = made?.items || made?.tasks || (Array.isArray(made) ? made : []);
-  return { id: items.length === 1 && items[0]?.id ? String(items[0].id) : null, text };
+  const id = items.length === 1 && items[0]?.id ? String(items[0].id) : null;
+  if (priority && id) await hub.setCraftPriority(space, id, priority).catch(err => console.error("Saving the priority failed:", err));
+  return { id, text };
 }
