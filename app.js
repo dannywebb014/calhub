@@ -1,16 +1,16 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=24";
-import * as google from "./google.js?v=24";
-import * as reminders from "/lifeos/shared/reminders.js?v=24";
-import * as T from "./tasks.js?v=24";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=24";
-import { initDrag, isDragging } from "./drag.js?v=24";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=24";
-import * as speech from "/lifeos/shared/speech.js?v=24";
+import * as D from "./dates.js?v=25";
+import * as google from "./google.js?v=25";
+import * as reminders from "/lifeos/shared/reminders.js?v=25";
+import * as T from "./tasks.js?v=25";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=25";
+import { initDrag, isDragging } from "./drag.js?v=25";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=25";
+import * as speech from "/lifeos/shared/speech.js?v=25";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=24") : null;
+const demo = DEMO ? await import("./demo.js?v=25") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 

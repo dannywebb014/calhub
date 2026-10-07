@@ -9,9 +9,9 @@
 // its own, so they can be set up and tested here too; saving here writes the
 // same settings tasks. reads.
 
-import * as todoist from "/lifeos/shared/todoist.js?v=24";
-import { SPACES } from "/lifeos/shared/parse.js?v=24";
-import * as hub from "/lifeos/shared/hubtasks.js?v=24";
+import * as todoist from "/lifeos/shared/todoist.js?v=25";
+import { SPACES } from "/lifeos/shared/parse.js?v=25";
+import * as hub from "/lifeos/shared/hubtasks.js?v=25";
 
 export { SPACES };
 export const TASKS_APP = "../taskhub/";
