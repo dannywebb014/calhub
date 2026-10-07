@@ -11,8 +11,8 @@
 // Anything else is an event. The page shows which it picked, and a tap
 // switches it.
 
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=20";
-import * as D from "./dates.js?v=20";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=21";
+import * as D from "./dates.js?v=21";
 
 const TASK_WORDS = /^(?:task|todo|to-do|to do|remind me to|reminder)\b[\s:,.\-–—]*/i;
 const SPACE_LEAD = new RegExp(`^(?:(?:in|for|to|into|on)\\s+)?(?:${SPACES.map(s => s.pattern).join("|")})\\b`, "i");
