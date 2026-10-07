@@ -1,17 +1,17 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=26";
-import * as google from "./google.js?v=26";
-import * as reminders from "/lifeos/shared/reminders.js?v=26";
-import { pullToRefresh } from "/lifeos/shared/pull.js?v=26";
-import * as T from "./tasks.js?v=26";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=26";
-import { initDrag, isDragging } from "./drag.js?v=26";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=26";
-import * as speech from "/lifeos/shared/speech.js?v=26";
+import * as D from "./dates.js?v=27";
+import * as google from "./google.js?v=27";
+import * as reminders from "/lifeos/shared/reminders.js?v=27";
+import { pullToRefresh } from "/lifeos/shared/pull.js?v=27";
+import * as T from "./tasks.js?v=27";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=27";
+import { initDrag, isDragging } from "./drag.js?v=27";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=27";
+import * as speech from "/lifeos/shared/speech.js?v=27";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=26") : null;
+const demo = DEMO ? await import("./demo.js?v=27") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -1120,20 +1120,45 @@ function taskError(err, t) {
 async function tick(t, el) {
   if (tk.isLocked(t)) { toast(T.lockedHelp(t), "err"); return; }
   el?.classList.add("done");
+  const prevDate = t.date, prevDue = t.due;
+  // Marks this tick, so an Undo before it leaves the screen stops it leaving.
+  const tickedAt = t.tickedAt = Date.now();
   try {
     const res = await tk.completeTask(t);
+    const undo = DEMO ? undefined : { label: "Undo", run: () => untick(t, { ...res, prevDate, prevDue }) };
     // A repeating task kept in lifeOS moves to its next date and stays.
     if (res?.next) {
       setTimeout(() => { t.date = res.next; el?.classList.remove("done"); render(); writeSnapshot(); }, el ? 650 : 0);
-      toast(`${t.text} → next ${D.relative(res.next)}`, "ok");
+      toast(`${t.text} → next ${D.relative(res.next)}`, "ok", undo);
       return;
     }
+    toast(`Ticked off ${t.text}`, "ok", undo);
     // Leave it ticked for a moment so the change is seen, then drop it.
-    setTimeout(() => { S.tasks = S.tasks.filter(x => x.id !== t.id); render(); writeSnapshot(); }, el ? 650 : 0);
+    setTimeout(() => {
+      if (t.tickedAt !== tickedAt) return;
+      S.tasks = S.tasks.filter(x => x.id !== t.id); render(); writeSnapshot();
+    }, el ? 650 : 0);
   } catch (err) {
     console.error("Ticking off failed:", err);
     el?.classList.remove("done");
     toast(taskError(err, t), "err");
+  }
+}
+
+// Undo for a tick: the task back where it was, open again.
+async function untick(t, info) {
+  t.tickedAt = null;
+  try {
+    await T.undoComplete(t, info);
+    t.date = info.prevDate;
+    if (info.prevDue) t.due = info.prevDue;
+    if (!S.tasks.includes(t)) S.tasks = [...S.tasks.filter(x => x.id !== t.id), t];
+    render();
+    writeSnapshot();
+    toast(`${t.text} is back`, "ok");
+  } catch (err) {
+    console.error("Undo failed:", err);
+    toast(`Couldn’t undo: ${err.message}`, "err");
   }
 }
 

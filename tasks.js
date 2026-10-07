@@ -9,9 +9,9 @@
 // its own, so they can be set up and tested here too; saving here writes the
 // same settings tasks. reads.
 
-import * as todoist from "/lifeos/shared/todoist.js?v=26";
-import { SPACES } from "/lifeos/shared/parse.js?v=26";
-import * as hub from "/lifeos/shared/hubtasks.js?v=26";
+import * as todoist from "/lifeos/shared/todoist.js?v=27";
+import { SPACES } from "/lifeos/shared/parse.js?v=27";
+import * as hub from "/lifeos/shared/hubtasks.js?v=27";
 
 export { SPACES };
 export const TASKS_APP = "../taskhub/";
@@ -216,6 +216,19 @@ export async function completeTask(task) {
   return craft(task.spaceId, "/tasks", {
     method: "PUT",
     body: JSON.stringify({ tasksToUpdate: [{ id: task.id, taskInfo: { state: "done" } }] }),
+  });
+}
+
+// Undo for completeTask: open again, or a repeating task back to its date.
+export async function undoComplete(task, { prevDate, prevDue, next, logId }) {
+  if (task.builtin) return hub.undoComplete(task, { prevDate, next, logId });
+  if (isTodoist(task.spaceId)) {
+    // A repeating Todoist task moved on when closed; its date goes back instead.
+    return task.recurring && prevDue ? todoist.rescheduleTask({ ...task, due: prevDue }, prevDate) : todoist.reopenTask(task.id);
+  }
+  return craft(task.spaceId, "/tasks", {
+    method: "PUT",
+    body: JSON.stringify({ tasksToUpdate: [{ id: task.id, taskInfo: { state: "todo" } }] }),
   });
 }
 
