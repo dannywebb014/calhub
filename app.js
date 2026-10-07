@@ -1,16 +1,17 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=25";
-import * as google from "./google.js?v=25";
-import * as reminders from "/lifeos/shared/reminders.js?v=25";
-import * as T from "./tasks.js?v=25";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=25";
-import { initDrag, isDragging } from "./drag.js?v=25";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=25";
-import * as speech from "/lifeos/shared/speech.js?v=25";
+import * as D from "./dates.js?v=26";
+import * as google from "./google.js?v=26";
+import * as reminders from "/lifeos/shared/reminders.js?v=26";
+import { pullToRefresh } from "/lifeos/shared/pull.js?v=26";
+import * as T from "./tasks.js?v=26";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=26";
+import { initDrag, isDragging } from "./drag.js?v=26";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=26";
+import * as speech from "/lifeos/shared/speech.js?v=26";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=25") : null;
+const demo = DEMO ? await import("./demo.js?v=26") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -1683,6 +1684,14 @@ function refreshAll() {
   lastRefresh = Date.now();
   return Promise.all([loadTasks(), reloadEvents()]);
 }
+
+// Pull down from the top of the agenda or a day's hours to refresh. Not while
+// a sheet is open or something is being dragged.
+pullToRefresh({
+  refresh: refreshAll,
+  scroller: (target) => target.closest?.(".scroller") || null,
+  enabled: () => !S.sheet && !document.body.classList.contains("dragging"),
+});
 
 // An expired Google token gets one quiet trip through Google for a new one.
 function googleError(err, what = "That didn’t work") {
