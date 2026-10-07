@@ -1,17 +1,16 @@
-import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=27";
-import * as google from "./google.js?v=27";
-import * as reminders from "/lifeos/shared/reminders.js?v=27";
-import { pullToRefresh } from "/lifeos/shared/pull.js?v=27";
-import * as T from "./tasks.js?v=27";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=27";
-import { initDrag, isDragging } from "./drag.js?v=27";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=27";
-import * as speech from "/lifeos/shared/speech.js?v=27";
+import * as D from "./dates.js?v=28";
+import * as google from "./google.js?v=28";
+import * as reminders from "/lifeos/shared/reminders.js?v=28";
+import { pullToRefresh } from "/lifeos/shared/pull.js?v=28";
+import * as T from "./tasks.js?v=28";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=28";
+import { initDrag, isDragging } from "./drag.js?v=28";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=28";
+import * as speech from "/lifeos/shared/speech.js?v=28";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=27") : null;
+const demo = DEMO ? await import("./demo.js?v=28") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -1307,12 +1306,18 @@ async function tickBlock(e) {
 }
 
 // ─── Quick add ───────────────────────────────────────────────────────
+// The date reader (200 KB) is only needed once something is typed or said,
+// so it loads alongside the page instead of holding it up.
+let chrono = null;
+const chronoReady = import("https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm").then(m => { chrono = m; });
 const qa = $("qa-input");
+// Anything typed before it arrived is read again once it has.
+chronoReady.then(() => { if (qa.value.trim()) qa.dispatchEvent(new Event("input")); });
 let qaParsed = null;
 
 // Shared by the bar along the bottom and the add sheet from the header.
 function parseEntry(text, kind) {
-  if (!text.trim()) return null;
+  if (!text.trim() || !chrono) return null;
   kind = kind || guessKind(text);
   return kind === "task"
     ? { kind, tasks: parseTask(text, chrono, { defaultSpace: T.defaultSpace() }) }
@@ -1531,7 +1536,11 @@ function openDictate({ listen = false } = {}) {
   const micBtn = node.querySelector("[data-act=mic]");
   const said = node.querySelector(".dict-said");
 
-  const reparse = () => { tasks = parseTasks(input.value, chrono, { defaultSpace: T.defaultSpace() }); paint(); };
+  const reparse = () => {
+    if (!chrono) { chronoReady.then(reparse); return; }
+    tasks = parseTasks(input.value, chrono, { defaultSpace: T.defaultSpace() });
+    paint();
+  };
   const paintAdd = () => {
     addBtn.disabled = !tasks.length || tasks.some(t => !t.text.trim());
     addBtn.textContent = tasks.length > 1 ? `Add ${tasks.length} tasks` : "Add";

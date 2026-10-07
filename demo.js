@@ -2,7 +2,7 @@
 // Made-up calendars, events and tasks, kept in memory, so the page can be
 // tried and tested without Google, Craft or Todoist. Nothing is saved.
 
-import * as D from "./dates.js?v=27";
+import * as D from "./dates.js?v=28";
 
 const CALS = [
   { id: "me", name: "Personal", color: "#4a8fd0", primary: true, writable: true, selected: true },
