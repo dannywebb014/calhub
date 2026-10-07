@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>calendar.</title>
   <meta name="description" content="Your Google calendars and your Craft and Todoist tasks in one place.">
-  <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#EBF2F8" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#1a1e1a" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -33,11 +33,11 @@
   <style>
     /* My Hub neutrals and type, with calendar.'s blue as the accent. */
     :root {
-      --bg:#f4f1ea; --card:#fffdf8; --hover:#f9f6ef; --input:#f0ece3; --line:#e5dfd0; --line-strong:#ddd8cc;
+      --bg:#EBF2F8; --card:#fffdf8; --hover:#f9f6ef; --input:#f0ece3; --line:#e5dfd0; --line-strong:#ddd8cc;
       --text:#2c2218; --muted:#6b6055; --dim:#a8a295;
       --logo:#2f6aa3; --accent:#3b7bbf; --accent-text:#2a5f96; --accent-soft:#3b7bbf16;
       --danger:#b54e4e; --danger-soft:#b54e4e14; --success:#4a7c4a;
-      --sp-my:#2a7d77; --sp-work:#a0672e; --sp-todoist:#3f7a4a; --glow:.28;
+      --sp-my:#2a7d77; --sp-work:#a0672e; --sp-todoist:#3f7a4a; --glow:0; /* light mode is a plain background; the glow is dark mode only */
       --shadow:0 1px 3px rgba(44,34,24,.06); --shadow-lg:0 18px 50px rgba(44,34,24,.18);
       --hour:48px;
       --disp:var(--hub-head, 'Lora', Georgia, serif);
@@ -728,6 +728,6 @@
 
   <!-- The version is bumped on each release so a phone holding the page in
        its cache still fetches the new code. -->
-  <script type="module" src="app.js?v=19"></script>
+  <script type="module" src="app.js?v=20"></script>
 </body>
 </html>

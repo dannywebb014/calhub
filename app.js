@@ -1,15 +1,15 @@
 import * as chrono from "https://cdn.jsdelivr.net/npm/chrono-node@2.10.1/+esm";
-import * as D from "./dates.js?v=19";
-import * as google from "./google.js?v=19";
-import * as T from "./tasks.js?v=19";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=19";
-import { initDrag, isDragging } from "./drag.js?v=19";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=19";
-import * as speech from "/lifeos/shared/speech.js?v=19";
+import * as D from "./dates.js?v=20";
+import * as google from "./google.js?v=20";
+import * as T from "./tasks.js?v=20";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=20";
+import { initDrag, isDragging } from "./drag.js?v=20";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=20";
+import * as speech from "/lifeos/shared/speech.js?v=20";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=19") : null;
+const demo = DEMO ? await import("./demo.js?v=20") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -28,7 +28,7 @@ const saveSettings = () => { try { localStorage.setItem(SETTINGS_KEY, JSON.strin
 
 // "auto" follows the system; light or dark is set on <html> (index.html also
 // does this before the first paint) and the browser bar colour follows it.
-const THEME_BAR = { light: "#f4f1ea", dark: "#1a1e1a" };
+const THEME_BAR = { light: "#EBF2F8", dark: "#1a1e1a" };
 function applyTheme() {
   const forced = settings.theme === "light" || settings.theme === "dark";
   if (forced) document.documentElement.dataset.theme = settings.theme;
