@@ -8,13 +8,14 @@
 //    Drive Worcester"                      → on the shared calendar, with
 //                                             the address
 
-import * as D from "./dates.js?v=31";
+import * as D from "./dates.js?v=32";
 
 // A calendar can be named in words: "joint calendar …" at the start, or
 // "… on the joint calendar" anywhere. The word "calendar" (or "cal") is
 // needed, so "family dinner" stays a title. A calendar called "Joint
 // calendar" answers to "joint"; the main one also to "my" / "main"; one
-// named for two people ("Danny and Lucy's Life") to "joint" / "shared" / "our".
+// named for two people ("Danny and Lucy's Life") to "joint" / "shared" / "our",
+// and to a plain "joint" at the start ("joint dinner Friday 7pm").
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const ADD = String.raw`(?:add|ad|put)\b\s*`;
 function calendarWords(calendars) {
@@ -37,6 +38,9 @@ function findCalendar(s, calendars) {
   const which = (m) => words.find(([w]) => w === m.toLowerCase().replace(/\s+/g, " "))?.[1] || null;
   const lead = s.match(new RegExp(String.raw`^\s*(?:${ADD})?(?:(?:to|on|in|into)\s+)?(?:(?:the|my|our)\s+)?(${names})\s+(?:calendar|cal)\b[\s:,.\-–—]*(?:${ADD})?`, "i"));
   if (lead) return { calendar: which(lead[1]), rest: ` ${s.slice(lead[0].length)}` };
+  const shared = words.find(([w]) => w === "joint")?.[1];
+  const joint = shared && s.match(new RegExp(String.raw`^\s*(?:${ADD})?(?:(?:to|on|in|into)\s+)?(?:the\s+)?joint\b[\s:,.\-–—]*(?:${ADD})?`, "i"));
+  if (joint) return { calendar: shared, rest: ` ${s.slice(joint[0].length)}` };
   const mid = s.match(new RegExp(String.raw`\s(?:to|on|in|into)\s+(?:(?:the|my|our)\s+)?(${names})\s+(?:calendar|cal)\b`, "i"));
   if (mid) return { calendar: which(mid[1]), rest: `${s.slice(0, mid.index)} ${s.slice(mid.index + mid[0].length)}` };
   return null;
