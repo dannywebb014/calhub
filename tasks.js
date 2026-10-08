@@ -9,9 +9,9 @@
 // its own, so they can be set up and tested here too; saving here writes the
 // same settings tasks. reads.
 
-import * as todoist from "/lifeos/shared/todoist.js?v=33";
-import { SPACES } from "/lifeos/shared/parse.js?v=33";
-import * as hub from "/lifeos/shared/hubtasks.js?v=33";
+import * as todoist from "/lifeos/shared/todoist.js?v=34";
+import { SPACES } from "/lifeos/shared/parse.js?v=34";
+import * as hub from "/lifeos/shared/hubtasks.js?v=34";
 
 export { SPACES };
 export const TASKS_APP = "../taskhub/";
@@ -21,10 +21,14 @@ const settings = () => {
 };
 todoist.setToken(settings().todoist?.token);
 export const isTodoist = (id) => id === "todoist";
+// A space trying lifeOS tasks (switched in connections.) counts as having no
+// connection, though it stays saved.
 export const isConfigured = (id) => {
+  if (hub.inLifeosMode(id)) return false;
   const s = settings();
   return isTodoist(id) ? Boolean(s.todoist?.token) : Boolean(s.spaces?.[id]?.url);
 };
+export const trying = (id) => hub.inLifeosMode(id);
 export const defaultSpace = () => settings().defaultSpace || SPACES[0].id;
 
 // { url, key } for a Craft space, { token } for Todoist.
@@ -130,7 +134,10 @@ async function undatedDocTasks(spaceId) {
   }
 }
 
+// That switch is kept with the account; fetched once per visit, before the first load.
+let modeSynced = null;
 export async function loadTasks() {
+  await (modeSynced ||= hub.syncMode());
   todoist.setToken(settings().todoist?.token);
   const found = new Map();
   const failed = [];

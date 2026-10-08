@@ -1,14 +1,14 @@
-import * as D from "./dates.js?v=33";
-import * as google from "./google.js?v=33";
-import * as reminders from "/lifeos/shared/reminders.js?v=33";
-import { pullToRefresh } from "/lifeos/shared/pull.js?v=33";
-import * as T from "./tasks.js?v=33";
-import { parseEvent } from "./quickadd.js?v=33";
-import { initDrag, isDragging } from "./drag.js?v=33";
+import * as D from "./dates.js?v=34";
+import * as google from "./google.js?v=34";
+import * as reminders from "/lifeos/shared/reminders.js?v=34";
+import { pullToRefresh } from "/lifeos/shared/pull.js?v=34";
+import * as T from "./tasks.js?v=34";
+import { parseEvent } from "./quickadd.js?v=34";
+import { initDrag, isDragging } from "./drag.js?v=34";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=33") : null;
+const demo = DEMO ? await import("./demo.js?v=34") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -1106,11 +1106,13 @@ function connectionBox(s) {
   const store = () => T.saveConnection(s.id, todo ? { token: field("token").value } : { url: field("url").value, key: field("key").value });
   box.querySelectorAll("input").forEach(i => { i.onchange = store; });
   const result = box.querySelector(".conn-result");
-  result.textContent = T.isConfigured(s.id) ? "Saved" : "Not connected: kept in lifeOS";
+  const saved_ = T.connection(s.id);
+  const has = Boolean(todo ? saved_.token : saved_.url);
+  result.textContent = T.trying(s.id) ? "Saved · trying lifeOS tasks (switch in lifeOS connections.)" : has ? "Saved" : "Not connected: kept in lifeOS";
   box.querySelector(".btn").onclick = async () => {
     store();
     if (DEMO) { result.textContent = "Demo mode: nothing is connected."; return; }
-    if (!T.isConfigured(s.id)) { result.textContent = todo ? "Paste the token first." : "Paste the API URL first."; result.style.color = "var(--danger)"; return; }
+    if (!(todo ? T.connection(s.id).token : T.connection(s.id).url)) { result.textContent = todo ? "Paste the token first." : "Paste the API URL first."; result.style.color = "var(--danger)"; return; }
     result.style.color = "";
     result.textContent = "Checking…";
     const { ok, message } = await T.testConnection(s.id);
