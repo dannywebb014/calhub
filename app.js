@@ -1,16 +1,14 @@
-import * as D from "./dates.js?v=30";
-import * as google from "./google.js?v=30";
-import * as reminders from "/lifeos/shared/reminders.js?v=30";
-import { pullToRefresh } from "/lifeos/shared/pull.js?v=30";
-import * as T from "./tasks.js?v=30";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=30";
-import { initDrag, isDragging } from "./drag.js?v=30";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=30";
-import * as speech from "/lifeos/shared/speech.js?v=30";
+import * as D from "./dates.js?v=31";
+import * as google from "./google.js?v=31";
+import * as reminders from "/lifeos/shared/reminders.js?v=31";
+import { pullToRefresh } from "/lifeos/shared/pull.js?v=31";
+import * as T from "./tasks.js?v=31";
+import { parseEvent } from "./quickadd.js?v=31";
+import { initDrag, isDragging } from "./drag.js?v=31";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=30") : null;
+const demo = DEMO ? await import("./demo.js?v=31") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -61,8 +59,7 @@ const S = {
   taskSpacesOk: new Set(),     // task lists that loaded in full last time
   agenda: null,                // { from, to } of days in the list
   sheet: null,                 // which sheet is open
-  qaKind: null,                // event/task chosen by hand in quick add
-  qaCal: null,                 // …and the calendar
+  qaCal: null,                 // calendar chosen by hand in quick add
   qaPlace: null,               // …and the place ("" once removed)
 };
 
@@ -85,7 +82,6 @@ const I = {
   video: svg(`<polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/>`),
   people: svg(`<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>`),
   notes: svg(`<line x1="17" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="21" y1="14" x2="3" y2="14"/><line x1="17" y1="18" x2="3" y2="18"/>`),
-  mic: svg(`<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><line x1="12" y1="18" x2="12" y2="22"/>`, 18, 2.2),
   repeatSmall: svg(`<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>`, 10, 2.4),
   repeat: svg(`<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>`, 12),
   x: svg(`<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>`, 16, 2.4),
@@ -96,7 +92,6 @@ const I = {
   left: svg(`<polyline points="15 18 9 12 15 6"/>`, 16, 2.4),
   right: svg(`<polyline points="9 18 15 12 9 6"/>`, 16, 2.4),
   ext: svg(`<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>`, 11, 2.4),
-  swap: svg(`<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>`, 11, 2.6),
 };
 
 // ─── Toast ───────────────────────────────────────────────────────────
@@ -641,7 +636,7 @@ function fillTraySheet() {
 }
 
 // ─── Sheets ──────────────────────────────────────────────────────────
-// A sheet that needs tidying when it goes (dictation stops listening).
+// A sheet that needs tidying when it goes.
 let onSheetClose = null;
 const sheetGone = () => { const f = onSheetClose; onSheetClose = null; f?.(); };
 
@@ -650,14 +645,13 @@ function openSheet(kind, node) {
   S.sheet = kind;
   if (node) $("sheet").replaceChildren(node);
   $("sheet-layer").hidden = false;
-  $("sheet-layer").classList.remove("top");
   $("sheet").scrollTop = 0;
 }
 function closeSheet() {
   sheetGone();
   S.sheet = null;
   $("sheet-layer").hidden = true;
-  $("sheet-layer").classList.remove("away", "top");
+  $("sheet-layer").classList.remove("away");
   $("sheet").replaceChildren();
 }
 
@@ -1317,15 +1311,12 @@ const qa = $("qa-input");
 chronoReady.then(() => { if (qa.value.trim()) qa.dispatchEvent(new Event("input")); });
 let qaParsed = null;
 
-// Shared by the bar along the bottom and the add sheet from the header.
-function parseEntry(text, kind) {
+// Events only: tasks are added in tasks.
+function parseEntry(text) {
   if (!text.trim() || !chrono) return null;
-  kind = kind || guessKind(text, writableCalendars());
-  return kind === "task"
-    ? { kind, tasks: parseTask(text, chrono, { defaultSpace: T.defaultSpace() }) }
-    : parseEvent(text, chrono, { day: S.day, calendars: writableCalendars() });
+  return parseEvent(text, chrono, { day: S.day, calendars: writableCalendars() });
 }
-const entryReady = (p) => Boolean(p && (p.kind === "event" ? p.title : p.tasks.length));
+const entryReady = (p) => Boolean(p?.title);
 
 function draftWhen(p) {
   const day = D.iso(p.start);
@@ -1337,53 +1328,29 @@ function draftWhen(p) {
   return when;
 }
 
-// Saves an event or tasks; true once it's done, else it has said why.
+// Saves the event; true once it's done, else it has said why.
 async function addEntry(p) {
   try {
-    if (p.kind === "event") {
-      if (!googleReady()) { toast("Connect Google Calendar first.", "err", { label: "Settings", run: openSettings }); return false; }
-      const c = p.calendar || defaultCalendar();
-      if (!c) { toast("None of your calendars can be added to.", "err"); return false; }
-      const saved = await cal.createEvent(c, { title: p.title, allDay: p.allDay, start: p.start, end: p.end, location: p.location });
-      S.events.set(saved.key, saved);
-      select(saved.startDay);
-      toast(`Added ${saved.title} · ${D.relative(saved.startDay)}`, "ok", { label: "Edit", run: () => openEditor(S.events.get(saved.key)) });
-      writeSnapshot();
-      return true;
-    }
-    await addTasks(p.tasks);
+    if (!googleReady()) { toast("Connect Google Calendar first.", "err", { label: "Settings", run: openSettings }); return false; }
+    const c = p.calendar || defaultCalendar();
+    if (!c) { toast("None of your calendars can be added to.", "err"); return false; }
+    const saved = await cal.createEvent(c, { title: p.title, allDay: p.allDay, start: p.start, end: p.end, location: p.location });
+    S.events.set(saved.key, saved);
+    select(saved.startDay);
+    toast(`Added ${saved.title} · ${D.relative(saved.startDay)}`, "ok", { label: "Edit", run: () => openEditor(S.events.get(saved.key)) });
+    writeSnapshot();
     return true;
   } catch (err) {
     console.error("Quick add failed:", err);
-    if (p.kind === "event") googleError(err, "Couldn’t add it");
-    else toast(err instanceof TypeError ? "Couldn’t reach Craft or Todoist." : `Couldn’t add it: ${err.message}`, "err");
+    googleError(err, "Couldn’t add it");
     return false;
   }
 }
 
-// Tasks from quick add or dictation, one at a time. Any with a time are then
-// blocked out at it, as dropping them on that time would.
-async function addTasks(list) {
-  const timed = [];
-  for (const t of list) {
-    const made = await tk.addTask({ text: t.text, space: t.space, date: t.date, priority: t.priority, repeat: t.repeat });
-    if (t.time && t.date) timed.push({ ...t, id: made?.id || null, text: made?.text || t.text });
-  }
-  if (!timed.length) toast(`Added ${list.length === 1 ? list[0].text : `${list.length} tasks`}`);
-  await loadTasks();
-  for (const x of timed) {
-    // Craft may not hand back the new ID, so the task is then found by its text.
-    const task = (x.id && findTask(x.id)) || S.tasks.find(s => s.spaceId === x.space && s.text === x.text && !blockOf(s));
-    if (!task) { toast(`Added ${x.text}, but couldn’t find it again to block out ${x.time}.`, "err"); continue; }
-    const [h, m] = x.time.split(":").map(Number);
-    await timeBlock(task, x.date, h * 60 + m, x.minutes || 60);
-  }
-}
-
 function reparseQuick() {
-  if (!qa.value.trim()) { S.qaKind = null; S.qaCal = null; S.qaPlace = null; }
-  qaParsed = parseEntry(qa.value, S.qaKind);
-  if (qaParsed?.kind === "event") {
+  if (!qa.value.trim()) { S.qaCal = null; S.qaPlace = null; }
+  qaParsed = parseEntry(qa.value);
+  if (qaParsed) {
     if (S.qaCal) qaParsed.calendar = calendarOf(S.qaCal) || qaParsed.calendar;
     if (S.qaPlace !== null) qaParsed.location = S.qaPlace;
   }
@@ -1395,15 +1362,8 @@ function paintQuick() {
   $("qa-preview").hidden = !p;
   $("qa-add").disabled = !entryReady(p);
   if (!p) return;
-  $("qa-kind").innerHTML = `${p.kind === "event" ? "Event" : "Task"} ${I.swap}`;
-  const chips = $("qa-chips");
-  chips.hidden = p.kind !== "event";
-  if (p.kind === "event") {
-    $("qa-desc").innerHTML = `<b>${esc(p.title || "…")}</b> · ${esc(draftWhen(p))}`;
-    paintQuickChips(p);
-  } else {
-    $("qa-desc").innerHTML = p.tasks.map(t => `<b>${esc(t.text)}</b> · ${esc(T.spaceLabel(t.space))} · ${esc(t.date ? D.relative(t.date) : "no date")}`).join(" &nbsp; ");
-  }
+  $("qa-desc").innerHTML = `<b>${esc(p.title || "…")}</b> · ${esc(draftWhen(p))}`;
+  paintQuickChips(p);
 }
 
 // Under an event: where (tap to change it, Maps to open it in Google Maps)
@@ -1452,217 +1412,6 @@ async function submitQuick() {
   else paintQuick();
 }
 
-// ─── Add sheet ───────────────────────────────────────────────────────
-// The + in the header, after Fantastical: type a sentence and the card
-// under it fills in as you go. Event or Task can be picked by hand, as can
-// the calendar, and "More" opens the full editor with what's there so far.
-const ADD_HINTS = ["Lunch with Sam Friday 1pm at Nando’s", "Gym tomorrow 7am for 45 mins", "Holiday 12–19 Oct", "Work send the invoice tomorrow", "Work calendar review Monday 10am"];
-
-function openAdd(text = "") {
-  let kind = null;          // chosen by hand, else guessed from the words
-  let calId = null;         // calendar picked in the card
-  let parsed = null;
-  const node = html(`<form class="add" novalidate autocomplete="off">
-    <div class="add-head">
-      <div class="add-kind" role="group" aria-label="Kind"><button type="button" data-kind="event">Event</button><button type="button" data-kind="task">Task</button></div>
-      <button type="button" class="x-btn" data-close aria-label="Close">${I.x}</button>
-    </div>
-    <textarea class="add-input" name="text" rows="1" enterkeyhint="done" autocapitalize="sentences" placeholder="Event or task" aria-label="What to add"></textarea>
-    <div class="add-card" aria-live="polite"></div>
-    <div class="sh-foot"><button type="button" class="btn" data-act="more">More…</button><span class="spacer"></span><button class="btn primary" data-act="add">Add</button></div>
-  </form>`);
-  const input = node.elements.text;
-  const card = node.querySelector(".add-card");
-  const addBtn = node.querySelector("[data-act=add]");
-  const more = node.querySelector("[data-act=more]");
-
-  const grow = () => { input.style.height = "auto"; input.style.height = `${input.scrollHeight}px`; };
-  const reparse = () => {
-    parsed = parseEntry(input.value, kind);
-    if (parsed?.kind === "event" && calId) parsed.calendar = calendarOf(calId) || parsed.calendar;
-    paint();
-  };
-
-  function paint() {
-    const shown = parsed?.kind || kind || "event";
-    node.querySelectorAll("[data-kind]").forEach(b => b.classList.toggle("on", b.dataset.kind === shown));
-    addBtn.disabled = !entryReady(parsed);
-    more.hidden = shown !== "event";
-    if (!parsed) {
-      card.className = "add-card hints";
-      card.innerHTML = `<p>Try</p>${ADD_HINTS.map(h => `<button type="button" data-hint="${esc(h)}">${esc(h)}</button>`).join("")}`;
-      return;
-    }
-    if (parsed.kind === "task") {
-      card.className = "add-card";
-      card.innerHTML = parsed.tasks.map(t => `<div class="ac-task" style="--c:${spaceColour(t.space)}"><span class="ring"></span>
-        <div><div class="ac-title">${esc(t.text || "…")}</div><div class="ac-sub">${esc(T.spaceLabel(t.space))} · ${esc(t.date ? `${D.relative(t.date)}` : "No date")}</div></div></div>`).join("")
-        || `<div class="ac-sub">Nothing to add yet</div>`;
-      return;
-    }
-    const p = parsed;
-    const c = p.calendar || defaultCalendar();
-    const day = D.iso(p.start);
-    const last = p.allDay ? D.addDays(D.iso(p.end), -1) : D.iso(p.end);
-    const date = last !== day
-      ? `${D.weekday(day, "short")} ${D.dayMonth(day)} – ${D.weekday(last, "short")} ${D.dayMonth(last)}`
-      : `${D.weekday(day)} ${D.dayMonth(day)}${day.slice(0, 4) !== D.today().slice(0, 4) ? ` ${day.slice(0, 4)}` : ""}`;
-    const rel = D.relative(day);
-    const time = p.allDay ? "All-day" : `${D.time(p.start)} – ${D.time(p.end)} <span class="muted">· ${dur(p.end - p.start)}</span>`;
-    card.className = "add-card event";
-    card.style.setProperty("--c", c?.color || "var(--accent)");
-    card.innerHTML = `<div class="ac-title">${esc(p.title || "New event")}</div>
-      <div class="ac-row">${I.cal}<span>${esc(date)}${/^(?:Today|Tomorrow|Yesterday)$/.test(rel) && last === day ? ` <span class="muted">· ${esc(rel)}</span>` : ""}</span></div>
-      <div class="ac-row">${I.clock}<span>${time}</span></div>
-      ${p.location ? `<div class="ac-row">${I.pin}<a href="${esc(mapsLink(p.location))}" target="_blank" rel="noopener">${esc(p.location)}</a></div>` : ""}
-      ${c ? `<label class="ac-row ac-cal"><i></i><select aria-label="Calendar"></select>${I.chev}</label>` : `<div class="ac-row muted">Connect Google Calendar in settings to add events.</div>`}`;
-    const sel = card.querySelector("select");
-    if (sel) {
-      for (const x of writableCalendars()) sel.append(new Option(x.name, x.id, false, x.id === c.id));
-      sel.onchange = () => { calId = sel.value; reparse(); };
-    }
-  }
-
-  input.addEventListener("input", () => { if (!input.value.trim()) kind = null; grow(); reparse(); });
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); node.requestSubmit(); } });
-  node.querySelector(".add-kind").onclick = (e) => {
-    const b = e.target.closest("[data-kind]");
-    if (!b) return;
-    kind = b.dataset.kind;
-    reparse();
-    input.focus();
-  };
-  card.addEventListener("click", (e) => {
-    const h = e.target.closest("[data-hint]");
-    if (!h) return;
-    input.value = h.dataset.hint;
-    grow();
-    reparse();
-    input.focus();
-  });
-  more.onclick = () => {
-    const p = parsed?.kind === "event" ? parsed : null;
-    if (!p) { newEventAt(S.day); return; }
-    openEditor(null, { title: p.title, allDay: p.allDay, start: p.start, end: p.end, location: p.location, description: "", calendar: p.calendar });
-  };
-  node.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    if (!entryReady(parsed)) return;
-    addBtn.disabled = true;
-    if (await addEntry(parsed)) closeSheet();
-    else paint();
-  });
-
-  openSheet("add", node);
-  $("sheet-layer").classList.add("top");
-  input.value = text;
-  grow();
-  reparse();
-  input.focus();
-}
-
-// ─── Dictating tasks ─────────────────────────────────────────────────
-// tasks.' dictation, in a sheet: speak or type, one task per sentence, with
-// "work" / "my space" / "joint" switching space and a date and time going
-// with each. Each task can be tidied before it goes. A time blocks it out.
-function openDictate({ listen = false } = {}) {
-  let tasks = [];
-  let timer;
-  const node = html(`<form class="dictate" novalidate autocomplete="off">
-    <div class="sh-head"><h2>dictate<span class="dot-accent">.</span></h2><button type="button" class="x-btn" data-close aria-label="Close">${I.x}</button></div>
-    <textarea class="dict-input" name="text" rows="4" autocapitalize="sentences" placeholder="Speak or type your tasks" aria-label="Tasks"></textarea>
-    <div class="dict-mic"><button type="button" class="dict-btn" data-act="mic" hidden>${I.mic}<span>Start speaking</span></button><span class="dict-said"></span></div>
-    <p class="f-note">One task per sentence. Start with “work”, “my space” or “joint” to switch list. A date and time go with the task: “call Sam tomorrow at 3pm”.</p>
-    <div class="dict-list"></div>
-    <div class="sh-foot"><a class="btn" href="${T.TASKS_APP}" data-hub="tasks">Open tasks.</a><span class="spacer"></span><button class="btn primary" data-act="add" disabled>Add</button></div>
-  </form>`);
-  const input = node.elements.text;
-  const list = node.querySelector(".dict-list");
-  const addBtn = node.querySelector("[data-act=add]");
-  const micBtn = node.querySelector("[data-act=mic]");
-  const said = node.querySelector(".dict-said");
-
-  const reparse = () => {
-    if (!chrono) { chronoReady.then(reparse); return; }
-    tasks = parseTasks(input.value, chrono, { defaultSpace: T.defaultSpace() });
-    paint();
-  };
-  const paintAdd = () => {
-    addBtn.disabled = !tasks.length || tasks.some(t => !t.text.trim());
-    addBtn.textContent = tasks.length > 1 ? `Add ${tasks.length} tasks` : "Add";
-  };
-
-  function paint() {
-    paintAdd();
-    list.replaceChildren(...tasks.map((t, i) => {
-      const el = html(`<div class="dict-task" style="--c:${spaceColour(t.space)}">
-        <span class="ring"></span>
-        <div class="dt-body">
-          <input class="dt-text" aria-label="Task" enterkeyhint="done">
-          <div class="dt-meta">
-            <button type="button" class="dt-chip sp" data-act="space" aria-label="List, tap to switch"></button>
-            <label class="dt-chip${t.date ? " set" : ""}">${I.cal}<span>${esc(t.date ? D.relative(t.date) : "No date")}</span><input type="date" aria-label="Date"></label>
-            <label class="dt-chip${t.time ? " set" : ""}">${I.clock}<span>${esc(t.time ? `${t.time}${t.minutes && t.minutes !== 60 ? ` · ${dur(t.minutes * 60000)}` : ""}` : "Add time")}</span><input type="time" step="900" aria-label="Time to block out"></label>
-          </div>
-        </div>
-        <button type="button" class="x-btn" data-act="remove" aria-label="Remove task">${I.x}</button>
-      </div>`);
-      const text = el.querySelector(".dt-text");
-      text.value = t.text;
-      text.oninput = () => { t.text = text.value; paintAdd(); };
-      el.querySelector("[data-act=space]").textContent = T.spaceLabel(t.space);
-      el.querySelector("[data-act=space]").onclick = () => {
-        t.space = SPACES[(SPACES.findIndex(s => s.id === t.space) + 1) % SPACES.length].id;
-        paint();
-      };
-      const date = el.querySelector("input[type=date]");
-      date.value = t.date || "";
-      date.onchange = () => { t.date = date.value || null; if (!t.date) t.time = null; paint(); };
-      const time = el.querySelector("input[type=time]");
-      time.value = t.time || "";
-      // A time needs a day, so it brings today along when there isn't one.
-      time.onchange = () => { t.time = time.value || null; if (t.time && !t.date) t.date = D.today(); paint(); };
-      el.querySelector("[data-act=remove]").onclick = () => { tasks.splice(i, 1); paint(); };
-      return el;
-    }));
-  }
-
-  const mic = speech.listener(input, {
-    onChange: reparse,
-    onInterim: (s) => { said.textContent = s; },
-    onState: (on) => {
-      micBtn.classList.toggle("on", on);
-      micBtn.querySelector("span").textContent = on ? "Stop" : "Start speaking";
-    },
-    onError: (msg) => toast(msg, "err"),
-  });
-  if (speech.supported) {
-    micBtn.hidden = false;
-    micBtn.onclick = () => (mic.listening ? mic.stop() : mic.start());
-  }
-
-  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(reparse, 250); });
-  node.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    clearTimeout(timer);
-    if (addBtn.disabled) return;
-    mic.stop();
-    addBtn.disabled = true;
-    addBtn.textContent = "Adding…";
-    if (await addEntry({ kind: "task", tasks: tasks.map(t => ({ ...t, text: t.text.trim() })) })) closeSheet();
-    else paintAdd();
-  });
-
-  openSheet("dictate", node);
-  onSheetClose = () => { clearTimeout(timer); mic.stop(); };
-  paint();
-  // Started from the tap itself, which iOS needs before it will listen.
-  if (listen && speech.supported) mic.start();
-  else input.focus();
-}
-
-$("qa-mic").addEventListener("click", () => openDictate({ listen: true }));
-
 qa.addEventListener("input", reparseQuick);
 $("qa-form").addEventListener("submit", (e) => { e.preventDefault(); submitQuick(); });
 $("qa-chips").addEventListener("click", (e) => {
@@ -1672,11 +1421,6 @@ $("qa-chips").addEventListener("change", (e) => {
   if (e.target.tagName !== "SELECT") return;
   S.qaCal = e.target.value;
   reparseQuick();
-});
-$("qa-kind").addEventListener("click", () => {
-  S.qaKind = (qaParsed?.kind || "event") === "event" ? "task" : "event";
-  reparseQuick();
-  qa.focus();
 });
 
 // ─── Loading ─────────────────────────────────────────────────────────
@@ -1939,7 +1683,14 @@ $("prev").addEventListener("click", () => step(-1));
 $("next").addEventListener("click", () => step(1));
 $("title").addEventListener("click", () => { if (wide.matches) return; S.stripMonth = !S.stripMonth; renderTop(); renderStrip(); });
 $("settings-btn").addEventListener("click", openSettings);
-$("add-btn").addEventListener("click", () => openAdd());
+// Fetches the calendars, events and tasks afresh, as pulling down does.
+$("refresh-btn").addEventListener("click", async () => {
+  const b = $("refresh-btn");
+  if (b.classList.contains("spin")) return;
+  b.classList.add("spin");
+  // Turns for at least half a second, so a quick one is still seen.
+  try { await Promise.all([refreshAll(), new Promise(r => setTimeout(r, 500))]); } finally { b.classList.remove("spin"); }
+});
 function toggleTasks() {
   settings.showTasks = !settings.showTasks;
   saveSettings();
@@ -1962,7 +1713,7 @@ document.addEventListener("keydown", (e) => {
   const keys = {
     ".": () => select(D.today()), t: toggleTasks, d: () => setView("day"), w: () => setView("week"), m: () => setView("month"),
     l: () => setView("agenda"), ArrowLeft: () => step(-1), ArrowRight: () => step(1),
-    n: () => openAdd(), "/": () => qa.focus(), s: toggleSide, v: () => openDictate(),
+    n: () => qa.focus(), "/": () => qa.focus(), s: toggleSide, r: () => $("refresh-btn").click(),
   };
   if (keys[e.key]) { e.preventDefault(); keys[e.key](); }
 });
@@ -2034,7 +1785,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 // Links from the Android widget: ?day=2026-09-30 opens that day and ?add
-// opens the add sheet. They're kept in this tab while the page goes to
+// goes to the add bar. They're kept in this tab while the page goes to
 // Google and back for a new sign-in, then used once.
 const INTENT_KEY = "calendar.intent";
 function stashIntent() {
@@ -2068,7 +1819,7 @@ async function start() {
   const intent = takeIntent();
   if (intent.day) select(intent.day);
   else { render(); scrollAgendaTo(S.day); }
-  if (intent.add) openAdd();
+  if (intent.add) qa.focus();
   lastRefresh = Date.now();
   await Promise.all([
     loadTasks(),

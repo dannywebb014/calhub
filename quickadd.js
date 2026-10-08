@@ -1,24 +1,14 @@
 // ─── Quick add ───────────────────────────────────────────────────────
 //
-// One line of plain English becomes an event or a task:
-//   "Lunch with Sam Friday 1pm at Nando's"  → event, Fri 13:00–14:00, location
-//   "Gym tomorrow 7am for 45 mins /personal" → event on the calendar named
+// One line of plain English becomes an event (tasks are added in tasks.):
+//   "Lunch with Sam Friday 1pm at Nando's"  → Fri 13:00–14:00, with the place
+//   "Gym tomorrow 7am for 45 mins /personal" → on the calendar named
 //                                             "Personal…", 45 minutes long
 //   "Joint calendar add dinner with friends Friday at 7pm at 11 Massey
-//    Drive Worcester"                      → event on the calendar named
-//                                             "Joint…", with the address
-//   "Work send the invoice tomorrow"        → task in work.
-//   "Task buy milk"                         → task in the default space
-// Starting with a space name ("work", "my space", "joint") or with "task",
-// "todo" or "remind me to" makes a task, parsed exactly as tasks. does,
-// unless the word "calendar" follows the name. Anything else is an event.
-// The page shows which it picked, and a tap switches it.
+//    Drive Worcester"                      → on the shared calendar, with
+//                                             the address
 
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=30";
-import * as D from "./dates.js?v=30";
-
-const TASK_WORDS = /^(?:task|todo|to-do|to do|remind me to|reminder)\b[\s:,.\-–—]*/i;
-const SPACE_LEAD = new RegExp(`^(?:(?:in|for|to|into|on)\\s+)?(?:${SPACES.map(s => s.pattern).join("|")})\\b`, "i");
+import * as D from "./dates.js?v=31";
 
 // A calendar can be named in words: "joint calendar …" at the start, or
 // "… on the joint calendar" anywhere. The word "calendar" (or "cal") is
@@ -50,16 +40,6 @@ function findCalendar(s, calendars) {
   const mid = s.match(new RegExp(String.raw`\s(?:to|on|in|into)\s+(?:(?:the|my|our)\s+)?(${names})\s+(?:calendar|cal)\b`, "i"));
   if (mid) return { calendar: which(mid[1]), rest: `${s.slice(0, mid.index)} ${s.slice(mid.index + mid[0].length)}` };
   return null;
-}
-
-export const guessKind = (text, calendars = []) => {
-  const t = text.trim();
-  if (findCalendar(` ${t}`, calendars)) return "event";
-  return TASK_WORDS.test(t) || SPACE_LEAD.test(t) ? "task" : "event";
-};
-
-export function parseTask(text, chrono, { defaultSpace }) {
-  return parseTasks(text.trim().replace(TASK_WORDS, ""), chrono, { defaultSpace });
 }
 
 const tidy = (s) => {
