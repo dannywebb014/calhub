@@ -14,8 +14,8 @@
 // unless the word "calendar" follows the name. Anything else is an event.
 // The page shows which it picked, and a tap switches it.
 
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=29";
-import * as D from "./dates.js?v=29";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=30";
+import * as D from "./dates.js?v=30";
 
 const TASK_WORDS = /^(?:task|todo|to-do|to do|remind me to|reminder)\b[\s:,.\-–—]*/i;
 const SPACE_LEAD = new RegExp(`^(?:(?:in|for|to|into|on)\\s+)?(?:${SPACES.map(s => s.pattern).join("|")})\\b`, "i");
@@ -23,20 +23,24 @@ const SPACE_LEAD = new RegExp(`^(?:(?:in|for|to|into|on)\\s+)?(?:${SPACES.map(s 
 // A calendar can be named in words: "joint calendar …" at the start, or
 // "… on the joint calendar" anywhere. The word "calendar" (or "cal") is
 // needed, so "family dinner" stays a title. A calendar called "Joint
-// calendar" answers to "joint"; the main one also to "my" / "main".
+// calendar" answers to "joint"; the main one also to "my" / "main"; one
+// named for two people ("Danny and Lucy's Life") to "joint" / "shared" / "our".
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const ADD = String.raw`(?:add|ad|put)\b\s*`;
 function calendarWords(calendars) {
   const words = [];
   for (const c of calendars.filter(x => x.writable)) {
-    const name = c.name.toLowerCase().replace(/\s+(?:calendar|cal)$/, "").trim();
+    const name = curly(c.name.toLowerCase()).replace(/\s+(?:calendar|cal)$/, "").trim();
     if (name) words.push([name, c]);
     if (c.primary) for (const w of ["my", "main", "primary"]) words.push([w, c]);
+    if (/\s(?:and|&)\s/.test(name)) for (const w of ["joint", "shared", "our"]) words.push([w, c]);
   }
   // Longest first, so "work rota" is tried before "work".
   return words.sort((a, b) => b[0].length - a[0].length);
 }
+const curly = (x) => x.replace(/[‘’]/g, "'");
 function findCalendar(s, calendars) {
+  s = curly(s);
   const words = calendarWords(calendars);
   if (!words.length) return null;
   const names = words.map(([w]) => esc(w).replace(/\s+/g, "\\s+")).join("|");

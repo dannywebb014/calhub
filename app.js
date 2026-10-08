@@ -1,16 +1,16 @@
-import * as D from "./dates.js?v=29";
-import * as google from "./google.js?v=29";
-import * as reminders from "/lifeos/shared/reminders.js?v=29";
-import { pullToRefresh } from "/lifeos/shared/pull.js?v=29";
-import * as T from "./tasks.js?v=29";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=29";
-import { initDrag, isDragging } from "./drag.js?v=29";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=29";
-import * as speech from "/lifeos/shared/speech.js?v=29";
+import * as D from "./dates.js?v=30";
+import * as google from "./google.js?v=30";
+import * as reminders from "/lifeos/shared/reminders.js?v=30";
+import { pullToRefresh } from "/lifeos/shared/pull.js?v=30";
+import * as T from "./tasks.js?v=30";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=30";
+import { initDrag, isDragging } from "./drag.js?v=30";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=30";
+import * as speech from "/lifeos/shared/speech.js?v=30";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=29") : null;
+const demo = DEMO ? await import("./demo.js?v=30") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
