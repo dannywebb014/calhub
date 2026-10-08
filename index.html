@@ -107,7 +107,7 @@
     .side, .main { display:contents; }
     #top { grid-area:top; } #views { grid-area:views; } #strip { grid-area:strip; }
     #banner { grid-area:banner; } #agenda, #grid { grid-area:content; } #quick { grid-area:quick; }
-    #mini, #tray-inline, .side-logo { display:none; }
+    #mini, #tray-inline, #side-cals, .side-logo { display:none; }
     .shell[data-view=agenda] #grid { display:none; }
     .shell:not([data-view=agenda]) #agenda { display:none; }
 
@@ -118,7 +118,7 @@
       .side { display:flex; flex-direction:column; grid-area:side; min-height:0; border-right:1px solid var(--line); background:color-mix(in srgb, var(--hover) 55%, transparent); }
       .main { display:flex; flex-direction:column; grid-area:main; min-height:0; }
       #mini, .side-logo { display:block; }
-      #tray-inline { display:block; }
+      #tray-inline, #side-cals { display:block; }
       #strip { display:none; }
       .shell[data-view] #agenda { display:block; flex:1; }
       .shell[data-view] #grid { display:flex; flex:1; }
@@ -442,6 +442,18 @@
     .tray-head .n { font-size:12px; font-weight:700; color:var(--muted); }
     .tray-head svg { margin-left:auto; color:var(--muted); transition:transform .2s; }
     .tray-closed .tray-head svg { transform:rotate(-90deg); }
+    /* Calendars in the sidebar: tick to show, untick to hide. */
+    #side-cals { border-top:1px solid var(--line); flex-shrink:0; max-height:28%; overflow-y:auto; }
+    #side-cals[hidden] { display:none; }
+    .side-cal { display:flex; align-items:center; gap:10px; width:100%; padding:5px 16px 5px 18px; border:none; background:none; text-align:left; font-size:13.5px; color:var(--text); cursor:pointer; }
+    .side-cal:hover { background:var(--hover); }
+    .side-cal .box { width:16px; height:16px; flex-shrink:0; border-radius:4px; border:2px solid var(--c); display:grid; place-items:center; color:#fff; }
+    .side-cal[aria-pressed="true"] .box { background:var(--c); }
+    .side-cal[aria-pressed="false"] .nm { color:var(--muted); }
+    .side-cal .box svg { opacity:0; }
+    .side-cal[aria-pressed="true"] .box svg { opacity:1; }
+    .side-cal .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .tray-closed .side-cal { display:none; }
     .tray-closed .tray-list { display:none; }
     .tray-list { padding:0 12px 10px; }
     .tray-hint { font-size:12px; color:var(--dim); padding:0 8px 6px; }
@@ -611,6 +623,7 @@
     <aside class="side">
       <div class="side-logo"><h1 class="logo">calendar<span class="dot-accent">.</span></h1></div>
       <div id="mini"></div>
+      <section id="side-cals"></section>
       <section id="tray-inline"></section>
       <div id="agenda" class="scroller" aria-label="Agenda"></div>
     </aside>
@@ -677,7 +690,7 @@
 
   <!-- The version is bumped on each release so a phone holding the page in
        its cache still fetches the new code. -->
-  <script type="module" src="app.js?v=32"></script>
+  <script type="module" src="app.js?v=33"></script>
   <script>
     // Opens fast and works with no signal (sw.js keeps the app's files here).
     if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(err => console.warn("Offline copy:", err));

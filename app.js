@@ -1,14 +1,14 @@
-import * as D from "./dates.js?v=32";
-import * as google from "./google.js?v=32";
-import * as reminders from "/lifeos/shared/reminders.js?v=32";
-import { pullToRefresh } from "/lifeos/shared/pull.js?v=32";
-import * as T from "./tasks.js?v=32";
-import { parseEvent } from "./quickadd.js?v=32";
-import { initDrag, isDragging } from "./drag.js?v=32";
+import * as D from "./dates.js?v=33";
+import * as google from "./google.js?v=33";
+import * as reminders from "/lifeos/shared/reminders.js?v=33";
+import { pullToRefresh } from "/lifeos/shared/pull.js?v=33";
+import * as T from "./tasks.js?v=33";
+import { parseEvent } from "./quickadd.js?v=33";
+import { initDrag, isDragging } from "./drag.js?v=33";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=32") : null;
+const demo = DEMO ? await import("./demo.js?v=33") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -19,7 +19,7 @@ const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 // than in the repo so the page works with whichever Google project you use.
 const SETTINGS_KEY = DEMO ? "calendar.demo" : "calendar.settings";
 function loadSettings() {
-  const base = { hidden: [], hiddenSpaces: [], view: "agenda", clientId: "", defaultCal: "", trayOpen: true, showTasks: true, sideOpen: true, theme: "auto" };
+  const base = { hidden: [], hiddenSpaces: [], view: "agenda", clientId: "", defaultCal: "", trayOpen: true, calsOpen: true, showTasks: true, sideOpen: true, theme: "auto" };
   try { return { ...base, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}") }; } catch { return base; }
 }
 let settings = loadSettings();
@@ -197,6 +197,7 @@ function render() {
   renderBanner();
   renderStrip();
   renderMini();
+  renderSideCals();
   renderTray();
   if (wide.matches || S.view === "agenda") renderAgenda();
   if (wide.matches || S.view !== "agenda") renderGrid();
@@ -620,6 +621,31 @@ function trayItems() {
   return list;
 }
 
+// Showing or hiding a calendar, from the sidebar or settings. A calendar
+// turned back on has its events fetched; one turned off just goes.
+function showCalendar(id, on) {
+  settings.hidden = on ? settings.hidden.filter(x => x !== id) : [...new Set([...settings.hidden, id])];
+  saveSettings();
+  if (on) reloadEvents(); else { render(); writeSnapshot(); }
+}
+
+// Desktop: every calendar in the sidebar, under the month, ticked if shown.
+function renderSideCals() {
+  if (!wide.matches) return;
+  const box = $("side-cals");
+  box.hidden = !S.calendars.length;
+  if (!S.calendars.length) return;
+  const shown = S.calendars.filter(c => !settings.hidden.includes(c.id)).length;
+  box.className = settings.calsOpen ? "" : "tray-closed";
+  box.innerHTML = `<button class="tray-head" data-act="cals"><b>calendars<span class="dot-accent">.</span></b><span class="n">${shown < S.calendars.length ? `${shown} of ${S.calendars.length}` : ""}</span>${I.chev}</button>`
+    + S.calendars.map(c => `<button class="side-cal" data-cal="${esc(c.id)}" style="--c:${esc(c.color)}" aria-pressed="${!settings.hidden.includes(c.id)}" title="${esc(c.name)}"><span class="box">${I.checkSmall}</span><span class="nm">${esc(c.name)}</span></button>`).join("");
+}
+$("side-cals").addEventListener("click", (e) => {
+  if (e.target.closest("[data-act=cals]")) { settings.calsOpen = !settings.calsOpen; saveSettings(); renderSideCals(); return; }
+  const b = e.target.closest("[data-cal]");
+  if (b) showCalendar(b.dataset.cal, b.getAttribute("aria-pressed") !== "true");
+});
+
 function renderTray() {
   if (!wide.matches) return;
   const box = $("tray-inline");
@@ -1027,11 +1053,7 @@ function openSettings() {
     line.querySelector(".nm").textContent = c.name;
     const box = line.querySelector("input");
     box.checked = !settings.hidden.includes(c.id);
-    box.onchange = () => {
-      settings.hidden = box.checked ? settings.hidden.filter(x => x !== c.id) : [...settings.hidden, c.id];
-      saveSettings();
-      if (box.checked) reloadEvents(); else { render(); writeSnapshot(); }
-    };
+    box.onchange = () => showCalendar(c.id, box.checked);
     list.append(line);
   }
   const theme = node.querySelector("[name=theme]");

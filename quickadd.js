@@ -8,7 +8,7 @@
 //    Drive Worcester"                      → on the shared calendar, with
 //                                             the address
 
-import * as D from "./dates.js?v=32";
+import * as D from "./dates.js?v=33";
 
 // A calendar can be named in words: "joint calendar …" at the start, or
 // "… on the joint calendar" anywhere. The word "calendar" (or "cal") is
