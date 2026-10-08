@@ -1,16 +1,16 @@
-import * as D from "./dates.js?v=28";
-import * as google from "./google.js?v=28";
-import * as reminders from "/lifeos/shared/reminders.js?v=28";
-import { pullToRefresh } from "/lifeos/shared/pull.js?v=28";
-import * as T from "./tasks.js?v=28";
-import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=28";
-import { initDrag, isDragging } from "./drag.js?v=28";
-import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=28";
-import * as speech from "/lifeos/shared/speech.js?v=28";
+import * as D from "./dates.js?v=29";
+import * as google from "./google.js?v=29";
+import * as reminders from "/lifeos/shared/reminders.js?v=29";
+import { pullToRefresh } from "/lifeos/shared/pull.js?v=29";
+import * as T from "./tasks.js?v=29";
+import { guessKind, parseEvent, parseTask } from "./quickadd.js?v=29";
+import { initDrag, isDragging } from "./drag.js?v=29";
+import { parseTasks, SPACES } from "/lifeos/shared/parse.js?v=29";
+import * as speech from "/lifeos/shared/speech.js?v=29";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
 const DEMO = new URLSearchParams(location.search).has("demo");
-const demo = DEMO ? await import("./demo.js?v=28") : null;
+const demo = DEMO ? await import("./demo.js?v=29") : null;
 const cal = DEMO ? demo.calendar : google;
 const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -62,6 +62,8 @@ const S = {
   agenda: null,                // { from, to } of days in the list
   sheet: null,                 // which sheet is open
   qaKind: null,                // event/task chosen by hand in quick add
+  qaCal: null,                 // …and the calendar
+  qaPlace: null,               // …and the place ("" once removed)
 };
 
 const effectiveView = () => (wide.matches && S.view === "agenda" ? "week" : S.view);
@@ -93,6 +95,7 @@ const I = {
   chev: svg(`<polyline points="6 9 12 15 18 9"/>`, 16, 2.4),
   left: svg(`<polyline points="15 18 9 12 15 6"/>`, 16, 2.4),
   right: svg(`<polyline points="9 18 15 12 9 6"/>`, 16, 2.4),
+  ext: svg(`<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>`, 11, 2.4),
   swap: svg(`<polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>`, 11, 2.6),
 };
 
@@ -679,9 +682,8 @@ function whenText(e) {
 const VIDEO_URL = /https?:\/\/[^\s<>"']*(?:zoom\.us|teams\.microsoft\.com|teams\.live\.com|meet\.google\.com|whereby\.com|webex\.com)[^\s<>"']*/i;
 const videoLink = (e) => e.video || (e.location.match(VIDEO_URL) || e.description.match(VIDEO_URL) || [])[0] || null;
 
-const mapsLink = (place) => /iPhone|iPad|Macintosh/.test(navigator.userAgent)
-  ? `https://maps.apple.com/?q=${encodeURIComponent(place)}`
-  : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
+// Google Maps everywhere: on a phone with the app, it opens in the app.
+const mapsLink = (place) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`;
 
 // Google keeps notes as HTML when they were written in its own app.
 function notesText(desc) {
@@ -1318,7 +1320,7 @@ let qaParsed = null;
 // Shared by the bar along the bottom and the add sheet from the header.
 function parseEntry(text, kind) {
   if (!text.trim() || !chrono) return null;
-  kind = kind || guessKind(text);
+  kind = kind || guessKind(text, writableCalendars());
   return kind === "task"
     ? { kind, tasks: parseTask(text, chrono, { defaultSpace: T.defaultSpace() }) }
     : parseEvent(text, chrono, { day: S.day, calendars: writableCalendars() });
@@ -1379,8 +1381,12 @@ async function addTasks(list) {
 }
 
 function reparseQuick() {
-  if (!qa.value.trim()) S.qaKind = null;
+  if (!qa.value.trim()) { S.qaKind = null; S.qaCal = null; S.qaPlace = null; }
   qaParsed = parseEntry(qa.value, S.qaKind);
+  if (qaParsed?.kind === "event") {
+    if (S.qaCal) qaParsed.calendar = calendarOf(S.qaCal) || qaParsed.calendar;
+    if (S.qaPlace !== null) qaParsed.location = S.qaPlace;
+  }
   paintQuick();
 }
 
@@ -1390,12 +1396,52 @@ function paintQuick() {
   $("qa-add").disabled = !entryReady(p);
   if (!p) return;
   $("qa-kind").innerHTML = `${p.kind === "event" ? "Event" : "Task"} ${I.swap}`;
+  const chips = $("qa-chips");
+  chips.hidden = p.kind !== "event";
   if (p.kind === "event") {
-    const c = p.calendar || defaultCalendar();
-    $("qa-desc").innerHTML = `<b>${esc(p.title || "…")}</b> · ${esc(draftWhen(p))}${p.location ? ` · ${esc(p.location)}` : ""}${c ? ` · ${esc(c.name)}` : ""}`;
+    $("qa-desc").innerHTML = `<b>${esc(p.title || "…")}</b> · ${esc(draftWhen(p))}`;
+    paintQuickChips(p);
   } else {
     $("qa-desc").innerHTML = p.tasks.map(t => `<b>${esc(t.text)}</b> · ${esc(T.spaceLabel(t.space))} · ${esc(t.date ? D.relative(t.date) : "no date")}`).join(" &nbsp; ");
   }
+}
+
+// Under an event: where (tap to change it, Maps to open it in Google Maps)
+// and which calendar. Both can also be typed: "… at 11 Massey Drive",
+// "joint calendar …".
+function paintQuickChips(p) {
+  const c = p.calendar || defaultCalendar();
+  const place = p.location
+    ? `<button type="button" class="qa-chip set" data-act="place" title="Change the place">${I.pin}<span>${esc(p.location)}</span></button>
+       <a class="qa-chip maps" href="${esc(mapsLink(p.location))}" target="_blank" rel="noopener" title="Open in Google Maps">Maps ${I.ext}</a>`
+    : `<button type="button" class="qa-chip" data-act="place">${I.pin}<span>Add place</span></button>`;
+  const cal = c
+    ? `<label class="qa-chip cal" style="--c:${esc(c.color || "var(--accent)")}"><i></i><span>${esc(c.name)}</span>${I.chev}<select aria-label="Calendar"></select></label>`
+    : "";
+  $("qa-chips").innerHTML = place + cal;
+  const sel = $("qa-chips").querySelector("select");
+  if (sel) for (const x of writableCalendars()) sel.append(new Option(x.name, x.id, false, x.id === c.id));
+}
+
+// Typing a place in by hand: the chip becomes a box until Enter or a tap away.
+function editQuickPlace() {
+  const box = html(`<input class="qa-chip qa-place" enterkeyhint="done" autocapitalize="words" placeholder="Place or address" aria-label="Place">`);
+  box.value = qaParsed?.location || "";
+  $("qa-chips").querySelector("[data-act=place]")?.replaceWith(box);
+  $("qa-chips").querySelector(".maps")?.remove();
+  let done = false;
+  const finish = (keep) => {
+    if (done) return;
+    done = true;
+    if (keep) S.qaPlace = box.value.trim();
+    reparseQuick();
+  };
+  box.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); finish(true); qa.focus(); }
+    if (e.key === "Escape") { e.preventDefault(); finish(false); qa.focus(); }
+  });
+  box.addEventListener("blur", () => finish(true));
+  box.focus();
 }
 
 async function submitQuick() {
@@ -1410,7 +1456,7 @@ async function submitQuick() {
 // The + in the header, after Fantastical: type a sentence and the card
 // under it fills in as you go. Event or Task can be picked by hand, as can
 // the calendar, and "More" opens the full editor with what's there so far.
-const ADD_HINTS = ["Lunch with Sam Friday 1pm at Nando’s", "Gym tomorrow 7am for 45 mins", "Holiday 12–19 Oct", "Work send the invoice tomorrow"];
+const ADD_HINTS = ["Lunch with Sam Friday 1pm at Nando’s", "Gym tomorrow 7am for 45 mins", "Holiday 12–19 Oct", "Work send the invoice tomorrow", "Work calendar review Monday 10am"];
 
 function openAdd(text = "") {
   let kind = null;          // chosen by hand, else guessed from the words
@@ -1468,7 +1514,7 @@ function openAdd(text = "") {
     card.innerHTML = `<div class="ac-title">${esc(p.title || "New event")}</div>
       <div class="ac-row">${I.cal}<span>${esc(date)}${/^(?:Today|Tomorrow|Yesterday)$/.test(rel) && last === day ? ` <span class="muted">· ${esc(rel)}</span>` : ""}</span></div>
       <div class="ac-row">${I.clock}<span>${time}</span></div>
-      ${p.location ? `<div class="ac-row">${I.pin}<span>${esc(p.location)}</span></div>` : ""}
+      ${p.location ? `<div class="ac-row">${I.pin}<a href="${esc(mapsLink(p.location))}" target="_blank" rel="noopener">${esc(p.location)}</a></div>` : ""}
       ${c ? `<label class="ac-row ac-cal"><i></i><select aria-label="Calendar"></select>${I.chev}</label>` : `<div class="ac-row muted">Connect Google Calendar in settings to add events.</div>`}`;
     const sel = card.querySelector("select");
     if (sel) {
@@ -1619,6 +1665,14 @@ $("qa-mic").addEventListener("click", () => openDictate({ listen: true }));
 
 qa.addEventListener("input", reparseQuick);
 $("qa-form").addEventListener("submit", (e) => { e.preventDefault(); submitQuick(); });
+$("qa-chips").addEventListener("click", (e) => {
+  if (e.target.closest("[data-act=place]")) editQuickPlace();
+});
+$("qa-chips").addEventListener("change", (e) => {
+  if (e.target.tagName !== "SELECT") return;
+  S.qaCal = e.target.value;
+  reparseQuick();
+});
 $("qa-kind").addEventListener("click", () => {
   S.qaKind = (qaParsed?.kind || "event") === "event" ? "task" : "event";
   reparseQuick();
