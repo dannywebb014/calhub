@@ -642,21 +642,57 @@ export async function mount(ctx) {
     if (on) reloadEvents(); else { render(); writeSnapshot(); }
   }
 
-  // Desktop: every calendar in the sidebar, under the month, ticked if shown.
+  // ─── Calendar sets ──────────────────────────────────────────────────
+  // A set is a named choice of calendars to show ("Work", "Home"…), saved
+  // in Settings and kept with lifeOS's settings, so it's on every device.
+  // Which calendars are showing stays per device, as before.
+  const calSets = () => lifeSettings.get().calendarSets || [];
+  const shownIds = () => S.calendars.filter(c => !settings.hidden.includes(c.id)).map(c => c.id);
+  function activeSet() {
+    const now = shownIds();
+    return calSets().find(set => {
+      const ids = set.shown.filter(id => S.calendars.some(c => c.id === id));
+      return ids.length === now.length && ids.every(id => now.includes(id));
+    }) || null;
+  }
+  function applySet(id) {
+    if (id === "all") settings.hidden = [];
+    else {
+      const set = calSets().find(x => x.id === id);
+      if (!set) return;
+      settings.hidden = S.calendars.filter(c => !set.shown.includes(c.id)).map(c => c.id);
+    }
+    saveSettings();
+    reloadEvents();
+    renderSideCals();
+  }
+  async function saveSet(name) {
+    const sets = calSets().filter(x => x.name.toLowerCase() !== name.toLowerCase());
+    await lifeSettings.save({ calendarSets: [...sets, { id: crypto.randomUUID(), name, shown: shownIds() }] });
+    renderSideCals();
+  }
+  async function deleteSet(id) {
+    await lifeSettings.save({ calendarSets: calSets().filter(x => x.id !== id) });
+    renderSideCals();
+  }
+
+  // Desktop sidebar: once there are sets, a picker for them under the month.
+  // (The calendars themselves are ticked in Settings.)
   function renderSideCals() {
     if (!wide.matches) return;
     const box = $("side-cals");
-    box.hidden = !S.calendars.length;
-    if (!S.calendars.length) return;
-    const shown = S.calendars.filter(c => !settings.hidden.includes(c.id)).length;
-    box.className = settings.calsOpen ? "" : "tray-closed";
-    box.innerHTML = `<button class="tray-head" data-act="cals"><b>calendars<span class="dot-accent">.</span></b><span class="n">${shown < S.calendars.length ? `${shown} of ${S.calendars.length}` : ""}</span>${I.chev}</button>`
-      + S.calendars.map(c => `<button class="side-cal" data-cal="${esc(c.id)}" style="--c:${esc(c.color)}" aria-pressed="${!settings.hidden.includes(c.id)}" title="${esc(c.name)}"><span class="box">${I.checkSmall}</span><span class="nm">${esc(c.name)}</span></button>`).join("");
+    const sets = calSets();
+    box.hidden = !S.calendars.length || !sets.length;
+    if (box.hidden) return;
+    const act = activeSet(), all = !settings.hidden.length;
+    box.className = "";
+    box.innerHTML = `<label class="side-set"><b>calendars<span class="dot-accent">.</span></b><select aria-label="Calendar set">
+      <option value="all"${all ? " selected" : ""}>All calendars</option>
+      ${sets.map(x => `<option value="${esc(x.id)}"${!all && act?.id === x.id ? " selected" : ""}>${esc(x.name)}</option>`).join("")}
+      ${!all && !act ? `<option value="" selected disabled>Custom</option>` : ""}</select></label>`;
   }
-  $("side-cals").addEventListener("click", (e) => {
-    if (e.target.closest("[data-act=cals]")) { settings.calsOpen = !settings.calsOpen; saveSettings(); renderSideCals(); return; }
-    const b = e.target.closest("[data-cal]");
-    if (b) showCalendar(b.dataset.cal, b.getAttribute("aria-pressed") !== "true");
+  $("side-cals").addEventListener("change", (e) => {
+    if (e.target.matches("select") && e.target.value) applySet(e.target.value);
   });
 
   function renderTray() {
@@ -1018,6 +1054,10 @@ export async function mount(ctx) {
         </ol></details>
       </section>
       <section class="set-sec" id="cal-sec"><h3>Calendars</h3><div class="f-group" id="cal-list"></div>
+        <h3 style="margin-top:14px">Calendar sets</h3>
+        <div class="f-group" id="set-list"></div>
+        <div class="f-group" style="margin-top:8px"><div class="f-line"><input type="text" name="setName" placeholder="Name the calendars ticked above, e.g. Work" aria-label="Set name" style="flex:1;min-width:0"><button class="btn" data-act="saveset">Save set</button></div></div>
+        <p class="f-note" style="margin:6px 2px 10px">A set remembers which calendars are ticked. Switch between sets here or from the sidebar.</p>
         <div class="f-group" style="margin-top:8px"><div class="f-line"><label>New events</label><select name="defaultCal"></select></div>
           <div class="f-line"><label>Shared calendar</label><select name="sharedCal"></select></div></div>
         <p class="f-note" style="margin:6px 2px 0">The one you share with your partner or household. Quick add puts “joint …”, “shared …” and “our …” events on it.</p>
@@ -1068,9 +1108,41 @@ export async function mount(ctx) {
       line.querySelector(".nm").textContent = c.name;
       const box = line.querySelector("input");
       box.checked = !settings.hidden.includes(c.id);
-      box.onchange = () => showCalendar(c.id, box.checked);
+      box.onchange = () => { showCalendar(c.id, box.checked); paintSets(); };
       list.append(line);
     }
+    // Calendar sets: show one (ticks the calendars above to match), or delete it.
+    const setList = node.querySelector("#set-list");
+    function paintSets() {
+      const sets = calSets(), act = activeSet(), all = !settings.hidden.length;
+      const rows = [{ id: "all", name: "All calendars" }, ...sets];
+      setList.replaceChildren(...rows.map(x => {
+        const on = x.id === "all" ? all : !all && act?.id === x.id;
+        const line = html(`<div class="f-line"><span class="nm" style="flex:1"></span>
+          <button class="btn${on ? "" : " primary"}" data-show ${on ? "disabled" : ""}>${on ? "Showing" : "Show"}</button>
+          ${x.id === "all" ? "" : `<button class="x-btn" data-del aria-label="Delete this set">${I.x}</button>`}</div>`);
+        line.querySelector(".nm").textContent = x.name;
+        line.querySelector("[data-show]").onclick = () => {
+          applySet(x.id);
+          list.querySelectorAll(".cal-toggle input").forEach((b, i) => { b.checked = !settings.hidden.includes(S.calendars[i].id); });
+          paintSets();
+        };
+        const del = line.querySelector("[data-del]");
+        if (del) del.onclick = async () => { if (confirm(`Delete the set “${x.name}”?`)) { await deleteSet(x.id).catch(err => toast(`Couldn’t delete it: ${err.message}`, "err")); paintSets(); } };
+        return line;
+      }));
+    }
+    paintSets();
+    const setName = node.querySelector("[name=setName]");
+    const saveSetNow = async () => {
+      const name = setName.value.trim();
+      if (!name) { setName.focus(); return; }
+      if (!shownIds().length) { toast("Tick at least one calendar first.", "err"); return; }
+      try { await saveSet(name); setName.value = ""; paintSets(); toast(`Saved “${name}”`); }
+      catch (err) { toast(`Couldn’t save the set: ${err.message}`, "err"); }
+    };
+    node.querySelector("[data-act=saveset]").onclick = saveSetNow;
+    setName.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); saveSetNow(); } });
     const theme = node.querySelector("[name=theme]");
     theme.value = settings.theme;
     theme.onchange = () => { settings.theme = theme.value; saveSettings(); applyTheme(); };
