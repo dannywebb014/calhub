@@ -13,34 +13,37 @@ import * as D from "./dates.js?v=34";
 // A calendar can be named in words: "joint calendar …" at the start, or
 // "… on the joint calendar" anywhere. The word "calendar" (or "cal") is
 // needed, so "family dinner" stays a title. A calendar called "Joint
-// calendar" answers to "joint"; the main one also to "my" / "main"; one
-// named for two people ("Danny and Lucy's Life") to "joint" / "shared" / "our",
-// and to a plain "joint" at the start ("joint dinner Friday 7pm").
+// calendar" answers to "joint"; the main one also to "my" / "main"; the
+// shared calendar to "joint" / "shared" / "our", and to a plain "joint" at
+// the start ("joint dinner Friday 7pm"). Which one is shared is a setting
+// (calendar. → Settings, kept with lifeOS's settings): a calendar id, "" for
+// none, or unset to mean any calendar named for two people ("Sam and Alex").
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const ADD = String.raw`(?:add|ad|put)\b\s*`;
-function calendarWords(calendars) {
+function calendarWords(calendars, shared) {
   const words = [];
   for (const c of calendars.filter(x => x.writable)) {
     const name = curly(c.name.toLowerCase()).replace(/\s+(?:calendar|cal)$/, "").trim();
     if (name) words.push([name, c]);
     if (c.primary) for (const w of ["my", "main", "primary"]) words.push([w, c]);
-    if (/\s(?:and|&)\s/.test(name)) for (const w of ["joint", "shared", "our"]) words.push([w, c]);
+    const isShared = shared === undefined || shared === null ? /\s(?:and|&)\s/.test(name) : c.id === shared;
+    if (isShared) for (const w of ["joint", "shared", "our"]) words.push([w, c]);
   }
   // Longest first, so "work rota" is tried before "work".
   return words.sort((a, b) => b[0].length - a[0].length);
 }
 const curly = (x) => x.replace(/[‘’]/g, "'");
-function findCalendar(s, calendars) {
+function findCalendar(s, calendars, shared) {
   s = curly(s);
-  const words = calendarWords(calendars);
+  const words = calendarWords(calendars, shared);
   if (!words.length) return null;
   const names = words.map(([w]) => esc(w).replace(/\s+/g, "\\s+")).join("|");
   const which = (m) => words.find(([w]) => w === m.toLowerCase().replace(/\s+/g, " "))?.[1] || null;
   const lead = s.match(new RegExp(String.raw`^\s*(?:${ADD})?(?:(?:to|on|in|into)\s+)?(?:(?:the|my|our)\s+)?(${names})\s+(?:calendar|cal)\b[\s:,.\-–—]*(?:${ADD})?`, "i"));
   if (lead) return { calendar: which(lead[1]), rest: ` ${s.slice(lead[0].length)}` };
-  const shared = words.find(([w]) => w === "joint")?.[1];
-  const joint = shared && s.match(new RegExp(String.raw`^\s*(?:${ADD})?(?:(?:to|on|in|into)\s+)?(?:the\s+)?joint\b[\s:,.\-–—]*(?:${ADD})?`, "i"));
-  if (joint) return { calendar: shared, rest: ` ${s.slice(joint[0].length)}` };
+  const jointCal = words.find(([w]) => w === "joint")?.[1];
+  const joint = jointCal && s.match(new RegExp(String.raw`^\s*(?:${ADD})?(?:(?:to|on|in|into)\s+)?(?:the\s+)?joint\b[\s:,.\-–—]*(?:${ADD})?`, "i"));
+  if (joint) return { calendar: jointCal, rest: ` ${s.slice(joint[0].length)}` };
   const mid = s.match(new RegExp(String.raw`\s(?:to|on|in|into)\s+(?:(?:the|my|our)\s+)?(${names})\s+(?:calendar|cal)\b`, "i"));
   if (mid) return { calendar: which(mid[1]), rest: `${s.slice(0, mid.index)} ${s.slice(mid.index + mid[0].length)}` };
   return null;
@@ -54,7 +57,7 @@ const tidy = (s) => {
 const DURATION = /\bfor\s+(\d+(?:\.\d+)?)\s*(h|hrs?|hours?|m|mins?|minutes?)\b/i;
 
 // `day` is the day on screen: an event with a time but no date goes there.
-export function parseEvent(text, chrono, { now = new Date(), day, calendars = [] }) {
+export function parseEvent(text, chrono, { now = new Date(), day, calendars = [], shared }) {
   let s = ` ${text.trim()} `;
 
   // "/work" picks the calendar whose name starts with "work"; so does
@@ -66,7 +69,7 @@ export function parseEvent(text, chrono, { now = new Date(), day, calendars = []
     calendar = calendars.find(c => c.writable && c.name.toLowerCase().replace(/\s+/g, "").startsWith(q)) || null;
     if (calendar) s = s.replace(pick[0], " ");
   }
-  const named = calendar ? null : findCalendar(s, calendars);
+  const named = calendar ? null : findCalendar(s, calendars, shared);
   if (named) { calendar = named.calendar; s = named.rest; }
   // "Add dinner Friday …": the "add" is an instruction, not the title.
   s = s.replace(/^\s*add\s+/i, " ");

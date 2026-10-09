@@ -3,7 +3,8 @@ import * as google from "./google.js?v=34";
 import * as reminders from "/lifeos/shared/reminders.js?v=34";
 import { pullToRefresh } from "/lifeos/shared/pull.js?v=34";
 import * as T from "./tasks.js?v=34";
-import { parseEvent } from "./quickadd.js?v=34";
+import { parseEvent } from "./quickadd.js?v=35";
+import * as lifeSettings from "/lifeos/shared/settings.js?v=1";
 import { initDrag, isDragging } from "./drag.js?v=34";
 
 // ?demo swaps Google, Craft and Todoist for made-up data held in memory.
@@ -21,6 +22,8 @@ export async function mount(ctx) {
 
   const DEMO = ctx.url.searchParams.has("demo");
   const demo = DEMO ? await import("./demo.js?v=34") : null;
+  // lifeOS settings (the shared calendar): the device copy at once, Supabase's in the background.
+  if (!DEMO) lifeSettings.load().catch(() => {});
   const cal = DEMO ? demo.calendar : google;
   const tk = DEMO ? { ...T, ...demo.taskSource } : T;
 
@@ -1017,7 +1020,9 @@ export async function mount(ctx) {
         </ol></details>
       </section>
       <section class="set-sec" id="cal-sec"><h3>Calendars</h3><div class="f-group" id="cal-list"></div>
-        <div class="f-group" style="margin-top:8px"><div class="f-line"><label>New events</label><select name="defaultCal"></select></div></div>
+        <div class="f-group" style="margin-top:8px"><div class="f-line"><label>New events</label><select name="defaultCal"></select></div>
+          <div class="f-line"><label>Shared calendar</label><select name="sharedCal"></select></div></div>
+        <p class="f-note" style="margin:6px 2px 0">The one you share with your partner or household. Quick add puts “joint …”, “shared …” and “our …” events on it.</p>
       </section>
       <section class="set-sec"><h3>Task lists</h3><div class="f-group" id="space-list"></div></section>
       <section class="set-sec"><h3>Task connections</h3><div id="conn-list"></div>
@@ -1075,6 +1080,15 @@ export async function mount(ctx) {
     const def = node.querySelector("[name=defaultCal]");
     for (const c of writableCalendars()) def.append(new Option(c.name, c.id, false, c.id === defaultCalendar()?.id));
     def.onchange = () => { settings.defaultCal = def.value; saveSettings(); };
+    // Kept with lifeOS's settings, so it's the same on every device.
+    const shared = node.querySelector("[name=sharedCal]"), sharedNow = lifeSettings.get().sharedCalendar;
+    shared.append(new Option("Any named “… and …”", "auto", false, sharedNow === undefined || sharedNow === null));
+    shared.append(new Option("None", "", false, sharedNow === ""));
+    for (const c of writableCalendars()) shared.append(new Option(c.name, c.id, false, c.id === sharedNow));
+    shared.onchange = () => {
+      lifeSettings.save({ sharedCalendar: shared.value === "auto" ? undefined : shared.value })
+        .catch((err) => console.error("Couldn't save the shared calendar:", err));
+    };
     node.querySelector("#cal-sec").hidden = !S.calendars.length && !googleReady();
 
     const spaces = node.querySelector("#space-list");
@@ -1350,7 +1364,7 @@ export async function mount(ctx) {
   // Events only: tasks are added in tasks.
   function parseEntry(text) {
     if (!text.trim() || !chrono) return null;
-    return parseEvent(text, chrono, { day: S.day, calendars: writableCalendars() });
+    return parseEvent(text, chrono, { day: S.day, calendars: writableCalendars(), shared: lifeSettings.get().sharedCalendar });
   }
   const entryReady = (p) => Boolean(p?.title);
 
