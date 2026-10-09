@@ -10,7 +10,13 @@
 // The token is kept in this browser under "calendar.google", where lifeOS.
 // (same site) can also read it to show the next event.
 
+// Since 2026-10: connecting goes through lifeOS's google-auth function
+// (/lifeos/shared/gserver.js), which keeps Google's long-lived refresh token
+// on the server and hands out new hour-long tokens, so there's no trip
+// through Google each hour. The redirect below is the fallback when the
+// server isn't set up, and how anyone connected the old way carries on.
 import * as D from "./dates.js?v=34";
+import * as gs from "/lifeos/shared/gserver.js?v=1";
 
 const AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const API = "https://www.googleapis.com/calendar/v3";
@@ -23,7 +29,9 @@ const read = (k, fallback) => { try { return JSON.parse(localStorage.getItem(k))
 const write = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } };
 
 export const auth = () => read(KEY, {});
-export const isConnected = () => { const a = auth(); return Boolean(a.token && a.expires > Date.now()); };
+export const isConnected = () => { const a = auth(); return Boolean(a.server || (a.token && a.expires > Date.now())); };
+// A token good for the next call (renewed by the server when it holds one).
+export const freshToken = () => gs.freshToken();
 // Connected before, so a quiet trip through Google should bring a new token.
 export const wasConnected = () => Boolean(auth().email);
 export const silentTried = () => { try { return sessionStorage.getItem(SILENT_KEY) === "1"; } catch { return true; } };
@@ -40,6 +48,11 @@ function sameSiteTop() {
 }
 
 export function connect(clientId, { silent = false } = {}) {
+  // Asked for: through the server, so it stays connected. Quiet renewals keep the old way.
+  if (!silent) { gs.connect().catch((err) => { console.warn("Google through the server didn’t start, so the old way:", err.message); redirect(clientId, { silent }); }); return; }
+  redirect(clientId, { silent });
+}
+function redirect(clientId, { silent = false } = {}) {
   const state = crypto.randomUUID();
   try {
     sessionStorage.setItem(STATE_KEY, state);
@@ -80,6 +93,7 @@ export function takeRedirect(hash = location.hash, { tidy = true } = {}) {
 }
 
 export function disconnect() {
+  if (auth().server) { gs.disconnect(); return; }
   const { token } = auth();
   if (token) fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, { method: "POST" }).catch(() => {});
   try { localStorage.removeItem(KEY); } catch { /* none */ }
@@ -90,8 +104,8 @@ function expire() {
 }
 
 async function api(path, { method = "GET", body, query } = {}) {
-  const { token, expires } = auth();
-  if (!token || expires <= Date.now()) {
+  const token = await gs.freshToken();
+  if (!token) {
     const err = new Error("Google sign-in has expired");
     err.status = 401;
     throw err;

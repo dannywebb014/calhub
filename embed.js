@@ -1,5 +1,5 @@
 import * as D from "./dates.js?v=34";
-import * as google from "./google.js?v=34";
+import * as google from "./google.js?v=35";
 import * as reminders from "/lifeos/shared/reminders.js?v=34";
 import { pullToRefresh } from "/lifeos/shared/pull.js?v=34";
 import * as T from "./tasks.js?v=34";
@@ -249,13 +249,11 @@ export async function mount(ctx) {
       text = "Demo — made-up events and tasks. Nothing you change is saved.";
       label = "Leave demo";
       run = () => { if (ctx.standalone) location.href = location.pathname; else host.src = "/calhub/"; };
-    } else if (!settings.clientId) {
-      text = "Connect Google Calendar to see your events here.";
-      label = "Set up";
-      run = openSettings;
     } else if (!google.isConnected()) {
-      text = google.wasConnected() ? "Google needs you to sign in again." : "Sign in to Google to see your calendars.";
-      label = "Sign in";
+      // Connecting goes through lifeOS's server (no client ID needed); an old
+      // client ID here is only the fallback.
+      text = google.wasConnected() ? "Google needs you to connect again." : "Connect Google Calendar to see your events here.";
+      label = "Connect";
       run = () => google.connect(settings.clientId);
     }
     box.hidden = !text;
@@ -1007,7 +1005,7 @@ export async function mount(ctx) {
       <div class="sh-head"><h2>settings<span class="dot-accent">.</span></h2><button class="x-btn" data-close aria-label="Close">${I.x}</button></div>
       <section class="set-sec"><h3>Google Calendar</h3>
         <div class="f-group">
-          <div class="f-line"><label>Client ID</label><input type="text" name="clientId" placeholder="….apps.googleusercontent.com" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+          <div class="f-line"><label>Client ID <span class="f-note">(optional, old way)</span></label><input type="text" name="clientId" placeholder="….apps.googleusercontent.com" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
           <div class="f-line"><span class="grow f-note" id="g-status" style="flex:1"></span><button class="btn ${connected ? "" : "primary"}" data-act="google">${connected ? "Disconnect" : "Connect"}</button></div>
         </div>
         <details><summary>How to get a client ID</summary><ol>
@@ -1054,7 +1052,7 @@ export async function mount(ctx) {
       }
       settings.clientId = id.value.trim();
       saveSettings();
-      if (!settings.clientId.endsWith(".apps.googleusercontent.com")) {
+      if (settings.clientId && !settings.clientId.endsWith(".apps.googleusercontent.com")) {
         status.textContent = "That doesn’t look like a client ID. It ends in .apps.googleusercontent.com.";
         status.style.color = "var(--danger)";
         return;
@@ -1596,7 +1594,7 @@ export async function mount(ctx) {
   function syncReminders(force = true) {
     if (DEMO || !google.isConnected()) return;
     clearTimeout(remindTimer);
-    remindTimer = setTimeout(() => reminders.syncFromGoogle(google.auth().token, { force })
+    remindTimer = setTimeout(() => google.freshToken().then(token => reminders.syncFromGoogle(token, { force }))
       .catch(err => console.error("Reminders:", err)), 4000);
   }
 
