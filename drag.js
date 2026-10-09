@@ -20,20 +20,32 @@ let handlers = {};
 
 export const isDragging = () => Boolean(active);
 
+// h.root: where to listen and look things up (the app's shadow root, see
+// /lifeos/embed.js; the page by default). h.page: where the ghost goes and
+// what gets the "dragging" class (document.body by default).
+// Returns a function that stops listening (for the app's unmount).
+let where = document;
+let page = null;
 export function initDrag(h) {
   handlers = h;
-  document.addEventListener("pointerdown", down);
-  document.addEventListener("pointermove", move, { passive: true });
-  document.addEventListener("pointerup", up);
-  document.addEventListener("pointercancel", cancel);
-  // Once a touch drag has begun, stop the page scrolling under the finger.
-  document.addEventListener("touchmove", (e) => { if (active || pending?.armed) e.preventDefault(); }, { passive: false });
-  // The click that follows a drop shouldn't also open whatever was dropped.
-  document.addEventListener("click", (e) => {
-    if (swallowClick) { e.stopPropagation(); e.preventDefault(); swallowClick = false; }
-  }, true);
-  document.addEventListener("contextmenu", (e) => { if (active || pending?.armed) e.preventDefault(); });
+  where = h.root || document;
+  page = h.page || null;
+  const on = [
+    ["pointerdown", down],
+    ["pointermove", move, { passive: true }],
+    ["pointerup", up],
+    ["pointercancel", cancel],
+    // Once a touch drag has begun, stop the page scrolling under the finger.
+    ["touchmove", (e) => { if (active || pending?.armed) e.preventDefault(); }, { passive: false }],
+    // The click that follows a drop shouldn't also open whatever was dropped.
+    ["click", (e) => { if (swallowClick) { e.stopPropagation(); e.preventDefault(); swallowClick = false; } }, true],
+    ["contextmenu", (e) => { if (active || pending?.armed) e.preventDefault(); }],
+  ];
+  const target = where;
+  for (const [type, fn, opts] of on) target.addEventListener(type, fn, opts);
+  return () => { for (const [type, fn, opts] of on) target.removeEventListener(type, fn, opts); };
 }
+const body = () => page || document.body;
 
 function down(e) {
   if (e.button !== 0 || active) return;
@@ -77,9 +89,9 @@ function begin(x, y) {
   ghost.style.setProperty("--c", info?.color || "var(--accent)");
   ghost.innerHTML = `<small></small><span></span>`;
   ghost.querySelector("span").textContent = info?.label || el.textContent.trim();
-  document.body.append(ghost);
+  body().append(ghost);
   el.classList.add("dragging-src");
-  document.body.classList.add("dragging");
+  body().classList.add("dragging");
   active = { kind, id: rest.join(":"), el, ghost, x, y, grab: info?.grab || 0, minutes: info?.minutes || 60, target: null, slot: null };
   pending = null;
   place();
@@ -87,7 +99,7 @@ function begin(x, y) {
 }
 
 function targetAt(x, y) {
-  const hit = document.elementFromPoint(x, y);
+  const hit = where.elementFromPoint(x, y);
   const el = hit?.closest("[data-drop-date]");
   if (!el) return null;
   const t = { el, date: el.dataset.dropDate, minute: null };
@@ -133,7 +145,7 @@ const EDGE = 56;
 const DWELL_MS = 350;
 function autoscroll() {
   if (!active) return;
-  const hit = document.elementFromPoint(active.x, active.y);
+  const hit = where.elementFromPoint(active.x, active.y);
   const box = hit?.closest(".scroller, .band");
   let by = 0;
   if (box) {
@@ -155,7 +167,7 @@ function finish(drop) {
   a.slot?.remove();
   a.el.classList.remove("dragging-src");
   a.target?.el.classList.remove("drop-hover");
-  document.body.classList.remove("dragging");
+  body().classList.remove("dragging");
   if (drop && a.target) handlers.drop?.({ kind: a.kind, id: a.id }, a.target);
   handlers.end?.({ dropped: Boolean(drop && a.target) });
 }
